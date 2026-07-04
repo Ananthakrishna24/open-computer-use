@@ -71,6 +71,21 @@ class ActionCoerceTests(unittest.TestCase):
         self.assertEqual(action.verb, "wait")
         self.assertEqual(action.metadata["ms"], 250)
 
+    def test_verb_as_key_with_nested_params(self) -> None:
+        action = Action.coerce({"click": {"target": 141}})
+        self.assertEqual(action.verb, "click")
+        self.assertEqual(action.target, 141)
+        action = Action.coerce({"click": {"coordinate": [141, 141]}})
+        self.assertEqual(action.coordinate, (141, 141))
+        action = Action.coerce({"drag": {"coordinate": [400, 300], "to": [700, 600]}})
+        self.assertEqual(action.verb, "drag")
+        self.assertEqual(action.coordinate, (400, 300))
+        self.assertEqual(action.metadata["to"], [700, 600])
+        action = Action.coerce({"type": {"target": 3, "text": "hello"}})
+        self.assertEqual(action.verb, "type")
+        self.assertEqual(action.target, 3)
+        self.assertEqual(action.text, "hello")
+
     def test_goto_url_alias_and_untargeted_resolution(self) -> None:
         action = Action.coerce({"verb": "goto", "url": "https://example.test"})
         self.assertEqual(action.text, "https://example.test")

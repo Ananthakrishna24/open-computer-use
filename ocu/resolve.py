@@ -57,7 +57,10 @@ class Resolver:
             element = self._resolve_text(action.text)
             return ResolvedTarget(action=action, element=element, coordinate=element.center)
 
-        raise ResolutionError(f"{action.verb} requires target, coordinate, or text")
+        raise ResolutionError(
+            f"{action.verb} requires target, coordinate, or text as top-level fields, "
+            f'e.g. {{"verb": "{action.verb}", "target": 12}} or {{"verb": "{action.verb}", "coordinate": [x, y]}}'
+        )
 
     def _resolve_text(self, text: str) -> Element:
         query = normalize_text(text).casefold()

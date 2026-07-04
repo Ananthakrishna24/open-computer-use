@@ -161,6 +161,11 @@ class Action:
                     verb = candidate
                     inferred = value[candidate]
                     break
+            if isinstance(inferred, Mapping):
+                merged = {k: v for k, v in value.items() if k != verb}
+                merged.update(inferred)
+                merged["verb"] = verb
+                return cls.from_mapping(merged)
         target = next(
             (value[key] for key in ("target", "id", "element", "element_id") if value.get(key) is not None),
             None,

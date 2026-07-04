@@ -373,6 +373,8 @@ class LiveOpenRouterAgent:
         failures = 0
         nudges = 0
         api_errors = 0
+        last_failure = None
+        repeats = 0
 
         for _ in range(self.max_steps):
             response = self.client.chat.completions.create(
@@ -426,9 +428,29 @@ class LiveOpenRouterAgent:
                 if _is_bot_check(result):
                     self.pending_task = task
                     return BOT_CHECK_MESSAGE
-                failures = failures + 1 if _is_failure(result) else 0
+                if _is_failure(result):
+                    failures += 1
+                    key = (tool_call.function.name, tool_call.function.arguments)
+                    repeats = repeats + 1 if key == last_failure else 1
+                    last_failure = key
+                else:
+                    failures = 0
+                    last_failure = None
+                    repeats = 0
                 if failures >= self.escalate_after:
                     active_model = self.escalation_model
+            if repeats >= 2:
+                repeats = 0
+                self.messages.append(
+                    {
+                        "role": "user",
+                        "content": (
+                            "You sent the exact same failing action twice. It will never "
+                            "succeed as written. Re-read the error message, fix the JSON "
+                            "shape it shows, or take a completely different step."
+                        ),
+                    }
+                )
             if look_question is not None:
                 self._attach_screenshot(look_question)
 
