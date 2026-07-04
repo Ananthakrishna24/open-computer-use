@@ -188,8 +188,11 @@ class Browser:
         try:
             return self.sensor.capture(region=region, settle=settle)
         except Exception:
-            sleep(0.08)
-            return self.sensor.capture(region=region)
+            try:
+                self.page.wait_for_load_state("domcontentloaded")
+            except Exception:
+                sleep(0.08)
+            return self.sensor.capture(region=region, settle=settle)
 
     def _block_resources(self) -> None:
         client = getattr(self.executor, "_client", None)
