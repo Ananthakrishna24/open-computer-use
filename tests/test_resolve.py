@@ -30,5 +30,22 @@ class ResolverTests(unittest.TestCase):
             resolver.resolve(Action("click", text="Add to cart"))
 
 
+class ActionCoerceTests(unittest.TestCase):
+    def test_target_aliases(self) -> None:
+        for key in ("target", "id", "element", "element_id"):
+            self.assertEqual(Action.coerce({"verb": "click", key: 3}).target, 3)
+
+    def test_verb_and_text_aliases(self) -> None:
+        action = Action.coerce({"action": "type", "id": 2, "value": "mouse"})
+        self.assertEqual(action.verb, "type")
+        self.assertEqual(action.target, 2)
+        self.assertEqual(action.text, "mouse")
+        self.assertEqual(action.metadata, {})
+
+    def test_extra_keys_stay_in_metadata(self) -> None:
+        action = Action.coerce({"verb": "scroll", "dy": 300})
+        self.assertEqual(action.metadata, {"dy": 300})
+
+
 if __name__ == "__main__":
     unittest.main()

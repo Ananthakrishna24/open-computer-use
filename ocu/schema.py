@@ -143,12 +143,20 @@ class Action:
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "Action":
+        known = {"verb", "action", "target", "id", "element", "element_id", "coordinate", "text", "value"}
+        target = next(
+            (value[key] for key in ("target", "id", "element", "element_id") if value.get(key) is not None),
+            None,
+        )
+        text = value.get("text")
+        if text is None:
+            text = value.get("value")
         return cls(
-            verb=value.get("verb", ""),
-            target=value.get("target"),
+            verb=value.get("verb") or value.get("action") or "",
+            target=target,
             coordinate=value.get("coordinate"),
-            text=value.get("text"),
-            metadata={k: v for k, v in value.items() if k not in {"verb", "target", "coordinate", "text"}},
+            text=text,
+            metadata={k: v for k, v in value.items() if k not in known},
         )
 
     @classmethod

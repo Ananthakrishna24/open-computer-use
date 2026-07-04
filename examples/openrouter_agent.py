@@ -30,6 +30,7 @@ def run(
     escalate_after: int = 2,
     budget: int = 1200,
     max_steps: int = 40,
+    verbose: bool = False,
 ) -> str:
     client = create_client()
     env = Browser(start_url=url, max_obs_tokens=budget)
@@ -53,6 +54,8 @@ def run(
                 return message.content or ""
             for tool_call in message.tool_calls:
                 result = dispatch(env, tool_call)
+                if verbose:
+                    print(f"--- {active_model}\n>>> {tool_call.function.name} {tool_call.function.arguments}\n{result}\n")
                 failures = failures + 1 if _is_failure(result) else 0
                 if failures >= escalate_after:
                     active_model = escalation_model
@@ -76,5 +79,14 @@ if __name__ == "__main__":
     parser.add_argument("task")
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--escalation-model", default=ESCALATION_MODEL)
+    parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
-    print(run(args.url, args.task, model=args.model, escalation_model=args.escalation_model))
+    print(
+        run(
+            args.url,
+            args.task,
+            model=args.model,
+            escalation_model=args.escalation_model,
+            verbose=args.verbose,
+        )
+    )
