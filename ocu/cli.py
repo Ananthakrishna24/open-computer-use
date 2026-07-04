@@ -14,6 +14,8 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--budget", type=int, default=1500)
     serve.add_argument("--browser", default="chromium", choices=["chromium", "firefox", "webkit"])
     serve.add_argument("--headed", action="store_true", help="show the browser window")
+    serve.add_argument("--ax", action="store_true", help="merge accessibility snapshots (slower)")
+    serve.add_argument("--settle-ms", type=int, default=200, help="max post-action settle wait")
 
     args = parser.parse_args(argv)
     if args.command == "serve":
@@ -25,6 +27,8 @@ def main(argv: list[str] | None = None) -> int:
                 budget=args.budget,
                 headless=not args.headed,
                 browser_name=args.browser,
+                include_ax=args.ax,
+                settle_ms=args.settle_ms,
             )
         except Exception as exc:
             print(f"ocu: {exc}", file=sys.stderr)

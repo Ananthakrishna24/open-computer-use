@@ -12,15 +12,16 @@ DOM_SNAPSHOT_SCRIPT = r"""
     "radio", "switch", "combobox", "select", "menuitem", "tab", "slider",
     "spinbutton", "option"
   ]);
+  const canCheck = typeof Element.prototype.checkVisibility === "function";
+  const elements = [];
 
   function clean(text) {
     return String(text || "").replace(/\s+/g, " ").trim();
   }
 
-  function roleFor(node) {
+  function roleFor(node, tag) {
     const explicit = clean(node.getAttribute("role")).toLowerCase();
     if (explicit) return explicit;
-    const tag = node.tagName.toLowerCase();
     const type = clean(node.getAttribute("type")).toLowerCase();
     if (tag === "a" && node.hasAttribute("href")) return "link";
     if (tag === "button" || type === "button" || type === "submit" || type === "reset") return "button";
@@ -37,39 +38,7 @@ DOM_SNAPSHOT_SCRIPT = r"""
     return "text";
   }
 
-  function visible(node, rect, style) {
-    if (!rect || rect.width <= 0 || rect.height <= 0) return false;
-    if (style.display === "none" || style.visibility === "hidden") return false;
-    if (Number(style.opacity) === 0) return false;
-    return true;
-  }
-
-  function intersectsRegion(rect) {
-    if (!region) return true;
-    return rect.left < region.x + region.width &&
-      rect.right > region.x &&
-      rect.top < region.y + region.height &&
-      rect.bottom > region.y;
-  }
-
-  function cssPath(node) {
-    const parts = [];
-    let current = node;
-    while (current && current.nodeType === Node.ELEMENT_NODE && current !== document.body) {
-      const tag = current.tagName.toLowerCase();
-      let index = 1;
-      let sibling = current.previousElementSibling;
-      while (sibling) {
-        if (sibling.tagName === current.tagName) index += 1;
-        sibling = sibling.previousElementSibling;
-      }
-      parts.push(`${tag}:nth-of-type(${index})`);
-      current = current.parentElement;
-    }
-    return parts.reverse().join(">");
-  }
-
-  function labelFor(node, role) {
+  function labelFor(node, role, tag) {
     const aria = clean(node.getAttribute("aria-label"));
     if (aria) return aria;
     const labelledBy = clean(node.getAttribute("aria-labelledby"));
@@ -82,7 +51,6 @@ DOM_SNAPSHOT_SCRIPT = r"""
     }
     const title = clean(node.getAttribute("title"));
     if (title) return title;
-    const tag = node.tagName.toLowerCase();
     if ((tag === "input" || tag === "textarea" || tag === "select") && interactiveRoles.has(role)) {
       return clean(node.value || node.placeholder || "");
     }
@@ -91,27 +59,31 @@ DOM_SNAPSHOT_SCRIPT = r"""
     return clean(node.innerText || node.textContent);
   }
 
-  const nodes = Array.from(document.querySelectorAll("body, body *"));
-  const elements = [];
-  for (const node of nodes) {
-    const rect = node.getBoundingClientRect();
-    const style = window.getComputedStyle(node);
-    if (!visible(node, rect, style) || !intersectsRegion(rect)) continue;
+  function intersectsRegion(rect) {
+    if (!region) return true;
+    return rect.left < region.x + region.width &&
+      rect.right > region.x &&
+      rect.top < region.y + region.height &&
+      rect.bottom > region.y;
+  }
 
-    const role = roleFor(node);
-    const text = labelFor(node, role);
+  function emit(node, tag, path) {
+    const rect = node.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0 || !intersectsRegion(rect)) return;
+    const role = roleFor(node, tag);
+    const text = labelFor(node, role, tag);
     const interactive = interactiveRoles.has(role) ||
       node.hasAttribute("onclick") ||
       (node.hasAttribute("tabindex") && node.getAttribute("tabindex") !== "-1");
 
-    if (!interactive && !text) continue;
-    if (!interactive && node.children && node.children.length > 0) continue;
-    if (!interactive && text.length > 500) continue;
+    if (!interactive && !text) return;
+    if (!interactive && node.childElementCount > 0) return;
+    if (!interactive && text.length > 500) return;
 
     const state = {
       visible: true,
       interactive,
-      structural_path: cssPath(node)
+      structural_path: path
     };
     if (node === document.activeElement) state.focused = true;
     if ("disabled" in node && node.disabled) state.disabled = true;
@@ -128,6 +100,30 @@ DOM_SNAPSHOT_SCRIPT = r"""
     });
   }
 
+  function walk(parent, parentPath, hidden) {
+    const counts = {};
+    for (let node = parent.firstElementChild; node; node = node.nextElementSibling) {
+      const tag = node.tagName.toLowerCase();
+      counts[tag] = (counts[tag] || 0) + 1;
+      const step = tag + ":nth-of-type(" + counts[tag] + ")";
+      const path = parentPath ? parentPath + ">" + step : step;
+
+      let nodeHidden = hidden;
+      if (canCheck && node.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) {
+        nodeHidden = false;
+      } else {
+        const style = window.getComputedStyle(node);
+        if (style.display === "none" || Number(style.opacity) === 0) continue;
+        nodeHidden = canCheck ? true : (hidden || style.visibility === "hidden");
+      }
+
+      if (!nodeHidden) emit(node, tag, path);
+      walk(node, path, nodeHidden);
+    }
+  }
+
+  walk(document.body, "", false);
+
   return {
     url: window.location.href,
     viewport_size: [window.innerWidth, window.innerHeight],
@@ -139,8 +135,9 @@ DOM_SNAPSHOT_SCRIPT = r"""
 
 
 class BrowserSensor:
-    def __init__(self, page: Any) -> None:
+    def __init__(self, page: Any, *, include_ax: bool = False) -> None:
         self.page = page
+        self.include_ax = include_ax
 
     def capture(self, region: BBox | None = None) -> SensorFrame:
         payload = self.page.evaluate(DOM_SNAPSHOT_SCRIPT, _region_arg(region))
@@ -155,7 +152,10 @@ class BrowserSensor:
             )
             for item in payload.get("elements", [])
         ]
-        elements = merge_dom_and_ax(dom_elements, self._capture_ax_elements(region=region))
+        if self.include_ax:
+            elements = merge_dom_and_ax(dom_elements, self._capture_ax_elements(region=region))
+        else:
+            elements = dom_elements
         viewport = payload.get("viewport_size")
         viewport_size = tuple(viewport) if viewport else None
         return SensorFrame(

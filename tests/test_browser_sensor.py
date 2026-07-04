@@ -27,38 +27,45 @@ class FakePage:
         return b"png"
 
 
+DOM_PAYLOAD = {
+    "url": "https://example.test",
+    "viewport_size": [800, 600],
+    "device_scale_factor": 1,
+    "elements": [
+        {
+            "role": "button",
+            "text": "Submit",
+            "bbox": [10, 20, 100, 32],
+            "source": "dom",
+            "state": {"visible": True, "interactive": True, "structural_path": "button"},
+        }
+    ],
+}
+
+AX_PAYLOAD = {
+    "role": "WebArea",
+    "name": "",
+    "children": [
+        {
+            "role": "button",
+            "name": "Submit",
+            "disabled": True,
+            "bbox": [12, 21, 100, 32],
+        }
+    ],
+}
+
+
 class BrowserSensorTests(unittest.TestCase):
+    def test_ax_capture_is_skipped_by_default(self) -> None:
+        sensor = BrowserSensor(FakePage(DOM_PAYLOAD, AX_PAYLOAD))
+        frame = sensor.capture()
+        self.assertEqual(len(frame.elements), 1)
+        self.assertNotIn("ax_role", frame.elements[0].state)
+        self.assertNotIn("disabled", frame.elements[0].state)
+
     def test_ax_snapshot_augments_matching_dom_element(self) -> None:
-        sensor = BrowserSensor(
-            FakePage(
-                {
-                    "url": "https://example.test",
-                    "viewport_size": [800, 600],
-                    "device_scale_factor": 1,
-                    "elements": [
-                        {
-                            "role": "button",
-                            "text": "Submit",
-                            "bbox": [10, 20, 100, 32],
-                            "source": "dom",
-                            "state": {"visible": True, "interactive": True, "structural_path": "button"},
-                        }
-                    ],
-                },
-                {
-                    "role": "WebArea",
-                    "name": "",
-                    "children": [
-                        {
-                            "role": "button",
-                            "name": "Submit",
-                            "disabled": True,
-                            "bbox": [12, 21, 100, 32],
-                        }
-                    ],
-                },
-            )
-        )
+        sensor = BrowserSensor(FakePage(DOM_PAYLOAD, AX_PAYLOAD), include_ax=True)
         frame = sensor.capture()
         self.assertEqual(len(frame.elements), 1)
         element = frame.elements[0]

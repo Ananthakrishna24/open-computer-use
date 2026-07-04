@@ -8,9 +8,8 @@ from ..schema import Action
 
 
 class CdpExecutor:
-    def __init__(self, page: Any, *, post_action_delay: float = 0.05) -> None:
+    def __init__(self, page: Any) -> None:
         self.page = page
-        self.post_action_delay = post_action_delay
         self._client = self._make_cdp_client(page)
 
     def execute(self, action: Action, target: ResolvedTarget) -> None:
@@ -30,8 +29,6 @@ class CdpExecutor:
             return
         else:
             raise ValueError(f"unsupported action verb {action.verb!r}")
-        if self.post_action_delay:
-            sleep(self.post_action_delay)
 
     def _click(self, target: ResolvedTarget) -> None:
         if target.coordinate is None:
