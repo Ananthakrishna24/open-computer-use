@@ -6,7 +6,29 @@ from ..schema import BBox, Element, normalize_role, normalize_text
 from .base import SensorFrame
 
 DOM_SNAPSHOT_SCRIPT = r"""
-(region) => {
+async (arg) => {
+  const region = arg && arg.region;
+  const settle = arg && arg.settle;
+  if (settle) {
+    await new Promise((resolve) => {
+      let quietTimer = 0;
+      const observer = new MutationObserver(() => {
+        clearTimeout(quietTimer);
+        quietTimer = setTimeout(done, settle.quiet);
+      });
+      const capTimer = setTimeout(done, settle.max);
+      function done() {
+        observer.disconnect();
+        clearTimeout(quietTimer);
+        clearTimeout(capTimer);
+        resolve();
+      }
+      observer.observe(document.documentElement, {
+        subtree: true, childList: true, attributes: true, characterData: true
+      });
+      quietTimer = setTimeout(done, settle.quiet);
+    });
+  }
   const interactiveRoles = new Set([
     "button", "link", "input", "textbox", "textarea", "searchbox", "checkbox",
     "radio", "switch", "combobox", "select", "menuitem", "tab", "slider",
@@ -139,8 +161,8 @@ class BrowserSensor:
         self.page = page
         self.include_ax = include_ax
 
-    def capture(self, region: BBox | None = None) -> SensorFrame:
-        payload = self.page.evaluate(DOM_SNAPSHOT_SCRIPT, _region_arg(region))
+    def capture(self, region: BBox | None = None, settle: dict[str, int] | None = None) -> SensorFrame:
+        payload = self.page.evaluate(DOM_SNAPSHOT_SCRIPT, {"region": _region_arg(region), "settle": settle})
         dom_elements = [
             Element(
                 id=0,

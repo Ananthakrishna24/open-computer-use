@@ -37,7 +37,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--rows", type=int, default=150)
     parser.add_argument("--runs", type=int, default=20)
-    parser.add_argument("--settle-ms", type=int, default=200)
+    parser.add_argument("--settle-ms", type=int, default=150)
     parser.add_argument("--ax", action="store_true")
     args = parser.parse_args()
 

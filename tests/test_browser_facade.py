@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from ocu import Browser
-from ocu.env import PROBE_SCRIPT, SETTLE_SCRIPT
+from ocu.env import BLOCKED_URL_PATTERNS, PROBE_SCRIPT
 
 
 class FakeClient:
@@ -35,15 +35,14 @@ class FakePage:
         self.mouse = self
 
     def evaluate(self, script, arg=None):
-        if script is SETTLE_SCRIPT:
-            self.settle_calls += 1
-            return 0
         if script is PROBE_SCRIPT:
             self.probe_calls.append(arg)
             if self.probes:
                 return self.probes.pop(0)
             return {"url": "https://shop.test/cart", "dialogs": 0, "rect": None}
         self.snapshot_calls += 1
+        if arg and arg.get("settle"):
+            self.settle_calls += 1
         if not self.payloads:
             raise AssertionError("no fake payloads left")
         return self.payloads.pop(0)
@@ -108,7 +107,7 @@ class BrowserFacadeTests(unittest.TestCase):
                 ),
             ]
         )
-        env = Browser(page=page, max_obs_tokens=1500, change_threshold=1.0)
+        env = Browser(page=page, max_obs_tokens=1500, change_threshold=1.0, block_resources=False)
         first = env.observe()
         second = env.act("click", target=1)
         self.assertEqual(first.kind, "key")
@@ -199,6 +198,12 @@ class BrowserFacadeTests(unittest.TestCase):
         )
         self.assertEqual(page.probe_calls, [])
         self.assertEqual(page.snapshot_calls, 2)
+
+    def test_resource_blocking_enabled_by_default(self) -> None:
+        page = FakePage([payload([button()])])
+        Browser(page=page, max_obs_tokens=1500)
+        self.assertEqual(page.client.events[0], ("Network.enable", {}))
+        self.assertEqual(page.client.events[1], ("Network.setBlockedURLs", {"urls": BLOCKED_URL_PATTERNS}))
 
 
 if __name__ == "__main__":

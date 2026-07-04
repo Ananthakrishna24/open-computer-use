@@ -31,7 +31,9 @@ def serve_browser(
     headless: bool = True,
     browser_name: str = "chromium",
     include_ax: bool = False,
-    settle_ms: int = 200,
+    settle_ms: int = 150,
+    settle_quiet_ms: int = 20,
+    block_resources: bool = True,
 ) -> None:
     env = Browser(
         start_url=start_url,
@@ -40,6 +42,8 @@ def serve_browser(
         browser_name=browser_name,
         include_ax=include_ax,
         settle_ms=settle_ms,
+        settle_quiet_ms=settle_quiet_ms,
+        block_resources=block_resources,
     )
     try:
         create_server(env).run()

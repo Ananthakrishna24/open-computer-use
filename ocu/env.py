@@ -11,26 +11,29 @@ from .sensors import BrowserSensor
 from .serialize import observation_from_update
 from .state import FrameUpdate, StateStore
 
-SETTLE_SCRIPT = r"""
-(opts) => new Promise((resolve) => {
-  const start = performance.now();
-  let last = start;
-  const observer = new MutationObserver(() => { last = performance.now(); });
-  observer.observe(document.documentElement, {
-    subtree: true, childList: true, attributes: true, characterData: true
-  });
-  const tick = () => {
-    const now = performance.now();
-    if (now - last >= opts.quiet || now - start >= opts.max) {
-      observer.disconnect();
-      resolve(Math.round(now - start));
-      return;
-    }
-    setTimeout(tick, 8);
-  };
-  setTimeout(tick, 0);
-})
-"""
+BLOCKED_URL_PATTERNS = [
+    "*.png",
+    "*.jpg",
+    "*.jpeg",
+    "*.gif",
+    "*.webp",
+    "*.avif",
+    "*.ico",
+    "*.woff",
+    "*.woff2",
+    "*.ttf",
+    "*.otf",
+    "*.mp4",
+    "*.webm",
+    "*.mp3",
+    "*.m4a",
+    "*.ogg",
+    "*googletagmanager.com*",
+    "*google-analytics.com*",
+    "*doubleclick.net*",
+    "*connect.facebook.net*",
+    "*hotjar.com*",
+]
 
 PROBE_SCRIPT = r"""
 (arg) => {
@@ -68,8 +71,9 @@ class Browser:
         keyframe_interval: int = 10,
         change_threshold: float = 0.40,
         include_ax: bool = False,
-        settle_ms: int = 200,
-        settle_quiet_ms: int = 35,
+        settle_ms: int = 150,
+        settle_quiet_ms: int = 20,
+        block_resources: bool = True,
         **launch_options: Any,
     ) -> None:
         self.max_obs_tokens = max_obs_tokens
@@ -85,6 +89,8 @@ class Browser:
         self.page = page
         self.sensor = BrowserSensor(page, include_ax=include_ax)
         self.executor = CdpExecutor(page)
+        if block_resources:
+            self._block_resources()
 
         if start_url:
             self.page.goto(start_url, wait_until="domcontentloaded")
@@ -166,8 +172,7 @@ class Browser:
             self._playwright.stop()
 
     def _finish(self, labels: list[str], *, aborted_step: int | None = None, note: str | None = None):
-        self._settle()
-        frame = self._capture()
+        frame = self._capture(settle={"quiet": self.settle_quiet_ms, "max": self.settle_ms})
         last_action = "; ".join(labels) if labels else None
         if note:
             last_action = f"{last_action} ({note})" if last_action else note
@@ -179,18 +184,22 @@ class Browser:
         )
         return observation_from_update(update, max_tokens=self.max_obs_tokens)
 
-    def _capture(self, region: BBox | None = None):
+    def _capture(self, region: BBox | None = None, settle: dict[str, int] | None = None):
         try:
-            return self.sensor.capture(region=region)
+            return self.sensor.capture(region=region, settle=settle)
         except Exception:
             sleep(0.08)
             return self.sensor.capture(region=region)
 
-    def _settle(self) -> None:
+    def _block_resources(self) -> None:
+        client = getattr(self.executor, "_client", None)
+        if client is None:
+            return
         try:
-            self.page.evaluate(SETTLE_SCRIPT, {"quiet": self.settle_quiet_ms, "max": self.settle_ms})
+            client.send("Network.enable", {})
+            client.send("Network.setBlockedURLs", {"urls": BLOCKED_URL_PATTERNS})
         except Exception:
-            sleep(min(self.settle_ms, 100) / 1000)
+            pass
 
     def _probe(self, path: str | None) -> dict[str, Any] | None:
         try:

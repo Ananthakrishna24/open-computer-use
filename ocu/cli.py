@@ -15,7 +15,9 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--browser", default="chromium", choices=["chromium", "firefox", "webkit"])
     serve.add_argument("--headed", action="store_true", help="show the browser window")
     serve.add_argument("--ax", action="store_true", help="merge accessibility snapshots (slower)")
-    serve.add_argument("--settle-ms", type=int, default=200, help="max post-action settle wait")
+    serve.add_argument("--settle-ms", type=int, default=150, help="max post-action settle wait")
+    serve.add_argument("--quiet-ms", type=int, default=20, help="mutation quiet window before capture")
+    serve.add_argument("--all-assets", action="store_true", help="load images, fonts, media, trackers")
 
     args = parser.parse_args(argv)
     if args.command == "serve":
@@ -29,6 +31,8 @@ def main(argv: list[str] | None = None) -> int:
                 browser_name=args.browser,
                 include_ax=args.ax,
                 settle_ms=args.settle_ms,
+                settle_quiet_ms=args.quiet_ms,
+                block_resources=not args.all_assets,
             )
         except Exception as exc:
             print(f"ocu: {exc}", file=sys.stderr)
