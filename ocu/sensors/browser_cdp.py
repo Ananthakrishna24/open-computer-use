@@ -42,10 +42,25 @@ async (arg) => {
     return String(text || "").replace(/\s+/g, " ").trim();
   }
 
+  function proxiedControl(node, tag) {
+    if (tag !== "label" || !node.control) return null;
+    if (canCheck && node.control.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) {
+      return null;
+    }
+    return node.control;
+  }
+
   function roleFor(node, tag) {
     const explicit = clean(node.getAttribute("role")).toLowerCase();
     if (explicit) return explicit;
     const type = clean(node.getAttribute("type")).toLowerCase();
+    const control = proxiedControl(node, tag);
+    if (control) {
+      const controlType = clean(control.type).toLowerCase();
+      if (controlType === "radio") return "radio";
+      if (controlType === "checkbox") return "checkbox";
+      return "button";
+    }
     if (tag === "a" && node.hasAttribute("href")) return "link";
     if (tag === "button" || type === "button" || type === "submit" || type === "reset") return "button";
     if (tag === "textarea") return "textarea";
@@ -113,6 +128,8 @@ async (arg) => {
     if (node === document.activeElement) state.focused = true;
     if ("disabled" in node && node.disabled) state.disabled = true;
     if ("checked" in node) state.checked = Boolean(node.checked);
+    const control = proxiedControl(node, tag);
+    if (control && "checked" in control) state.checked = Boolean(control.checked);
     if ("value" in node && interactive) state.value = clean(node.value || "");
     if (node.getAttribute("aria-selected") === "true") state.selected = true;
 

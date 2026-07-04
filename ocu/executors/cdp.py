@@ -6,6 +6,12 @@ from typing import Any
 from ..resolve import ResolvedTarget
 from ..schema import Action
 
+FOCUS_SCRIPT = (
+    "() => { const el = document.activeElement;"
+    " return Boolean(el && (el.isContentEditable"
+    " || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')); }"
+)
+
 
 class CdpExecutor:
     def __init__(self, page: Any) -> None:
@@ -54,11 +60,23 @@ class CdpExecutor:
     def _type(self, action: Action, target: ResolvedTarget) -> None:
         if target.coordinate is not None:
             self._click(target)
+        self._wait_for_editable_focus()
         text = action.text or ""
         if self._client is not None:
             self._client.send("Input.insertText", {"text": text})
         else:
             self.page.keyboard.insert_text(text)
+
+    def _wait_for_editable_focus(self, timeout_ms: int = 600) -> None:
+        deadline = timeout_ms
+        while deadline > 0:
+            try:
+                if self.page.evaluate(FOCUS_SCRIPT):
+                    return
+            except Exception:
+                return
+            self._wait(Action(verb="wait", metadata={"ms": 50}))
+            deadline -= 50
 
     def _press(self, action: Action) -> None:
         key = action.text or action.metadata.get("key")

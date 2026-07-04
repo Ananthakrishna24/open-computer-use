@@ -70,6 +70,7 @@ class StateStore:
         self._frame = 0
         self._next_id = 1
         self._id_by_identity: dict[str, int] = {}
+        self._id_by_loose: dict[str, int] = {}
         self._elements: dict[int, Element] = {}
         self._url: str | None = None
 
@@ -89,6 +90,7 @@ class StateStore:
         self._frame = 0
         self._next_id = 1
         self._id_by_identity.clear()
+        self._id_by_loose.clear()
         self._elements.clear()
         self._url = None
 
@@ -127,28 +129,42 @@ class StateStore:
         )
 
     def _assign_ids(self, elements: list[Element]) -> list[Element]:
-        base_counts: dict[str, int] = {}
-        assigned: list[Element] = []
+        exact_counts: dict[str, int] = {}
+        loose_counts: dict[str, int] = {}
+        entries: list[tuple[Element, str, str, int | None]] = []
+        used: set[int] = set()
 
         for element in elements:
-            base = self._identity_base(element)
-            ordinal = base_counts.get(base, 0) + 1
-            base_counts[base] = ordinal
-            identity = f"{base}#{ordinal}"
-            element_id = self._id_by_identity.get(identity)
+            exact = _keyed(self._identity_base(element, with_path=True), exact_counts)
+            loose = _keyed(self._identity_base(element, with_path=False), loose_counts)
+            element_id = self._id_by_identity.get(exact)
+            if element_id is not None and element_id not in used:
+                used.add(element_id)
+            else:
+                element_id = None
+            entries.append((element, exact, loose, element_id))
+
+        assigned: list[Element] = []
+        for element, exact, loose, element_id in entries:
             if element_id is None:
-                element_id = self._next_id
-                self._next_id += 1
-                self._id_by_identity[identity] = element_id
+                element_id = self._id_by_loose.get(loose)
+                if element_id is None or element_id in used:
+                    element_id = self._next_id
+                    self._next_id += 1
+                used.add(element_id)
+                self._id_by_identity[exact] = element_id
+            self._id_by_loose[loose] = element_id
             assigned.append(element.with_id(element_id))
 
         return assigned
 
-    def _identity_base(self, element: Element) -> str:
+    def _identity_base(self, element: Element, *, with_path: bool) -> str:
         text = normalize_text(element.text).casefold()[:32]
-        structural_path = normalize_text(
-            element.state.get("structural_path") or element.state.get("path") or element.state.get("css_path") or ""
-        )
+        structural_path = ""
+        if with_path:
+            structural_path = normalize_text(
+                element.state.get("structural_path") or element.state.get("path") or element.state.get("css_path") or ""
+            )
         x, y, _, _ = element.bbox
         grid_cell = f"{x // self.grid_size}:{y // self.grid_size}"
         material = "\x1f".join([element.role, text, structural_path, grid_cell])
@@ -182,6 +198,12 @@ class StateStore:
         ):
             return "key", "change_threshold"
         return "delta", "delta"
+
+
+def _keyed(base: str, counts: dict[str, int]) -> str:
+    ordinal = counts.get(base, 0) + 1
+    counts[base] = ordinal
+    return f"{base}#{ordinal}"
 
 
 def diff_elements(previous: dict[int, Element], current: dict[int, Element]) -> DiffResult:

@@ -42,7 +42,7 @@ PROBE_SCRIPT = r"""
   const out = {
     url: location.href,
     dialogs: document.querySelectorAll(
-      'dialog[open],[role="dialog"],[role="alertdialog"],[role="alert"]'
+      'dialog[open],[role="alertdialog"]'
     ).length,
     rect: null
   };

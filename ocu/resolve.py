@@ -36,7 +36,7 @@ class Resolver:
 
     def resolve(self, action: Action | Mapping[str, object]) -> ResolvedTarget:
         action = Action.coerce(action)
-        if action.verb in {"wait", "observe", "done", "press", "goto", "back"} and action.target is None and action.coordinate is None:
+        if action.verb in {"wait", "observe", "done", "press", "goto", "back", "type"} and action.target is None and action.coordinate is None:
             return ResolvedTarget(action=action, element=None, coordinate=None)
 
         if action.target is not None:

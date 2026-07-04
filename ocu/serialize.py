@@ -40,6 +40,8 @@ def serialize_update(update: FrameUpdate, *, max_tokens: int) -> SerializedText:
 
 def serialize_keyframe(update: FrameUpdate, *, max_tokens: int) -> SerializedText:
     header = [f"## screen (frame {update.frame}, full)"]
+    if update.last_action:
+        header.append(_did_line(update))
     if update.url:
         header.append(f"url: {update.url}")
     if update.reason and update.reason != "first_observation":
@@ -69,10 +71,7 @@ def serialize_delta(update: FrameUpdate, *, max_tokens: int) -> SerializedText:
     previous_frame = max(update.frame - 1, 0)
     header = [f"## screen (frame {update.frame}, changes since frame {previous_frame})"]
     if update.last_action:
-        action_line = f"did: {update.last_action} -> ok"
-        if update.aborted_step is not None:
-            action_line = f"did: {update.last_action} -> aborted at step {update.aborted_step}"
-        header.append(action_line)
+        header.append(_did_line(update))
     if update.url and update.previous_url and update.url != update.previous_url:
         header.append(f"url: {update.url}")
     if update.reason != "delta":
@@ -88,6 +87,12 @@ def serialize_delta(update: FrameUpdate, *, max_tokens: int) -> SerializedText:
 
     summary_lines = [f"unchanged: {len(update.diff.unchanged)} elements"]
     return _fit_lines(header, change_lines, summary_lines, max_tokens=max_tokens, omitted_label="changes")
+
+
+def _did_line(update: FrameUpdate) -> str:
+    if update.aborted_step is not None:
+        return f"did: {update.last_action} -> aborted at step {update.aborted_step}"
+    return f"did: {update.last_action} -> ok"
 
 
 def format_element(element: Element, *, max_text: int = DEFAULT_MAX_TEXT) -> str:

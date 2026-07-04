@@ -4,6 +4,7 @@ import unittest
 
 from ocu import Browser
 from ocu.env import BLOCKED_URL_PATTERNS, PROBE_SCRIPT, TEXT_SCRIPT
+from ocu.executors.cdp import FOCUS_SCRIPT
 
 
 class FakeClient:
@@ -37,6 +38,8 @@ class FakePage:
     def evaluate(self, script, arg=None):
         if script is TEXT_SCRIPT:
             return "Latest release:\n  Python 3.99.0"
+        if script is FOCUS_SCRIPT:
+            return True
         if script is PROBE_SCRIPT:
             self.probe_calls.append(arg)
             if self.probes:
