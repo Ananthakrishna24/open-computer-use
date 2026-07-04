@@ -1,0 +1,39 @@
+from __future__ import annotations
+
+import argparse
+import sys
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="ocu")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    serve = subparsers.add_parser("serve", help="run an MCP server")
+    serve.add_argument("--target", choices=["browser"], required=True)
+    serve.add_argument("--start-url", required=True)
+    serve.add_argument("--budget", type=int, default=1500)
+    serve.add_argument("--browser", default="chromium", choices=["chromium", "firefox", "webkit"])
+    serve.add_argument("--headed", action="store_true", help="show the browser window")
+
+    args = parser.parse_args(argv)
+    if args.command == "serve":
+        from .integrations.mcp_server import serve_browser
+
+        try:
+            serve_browser(
+                start_url=args.start_url,
+                budget=args.budget,
+                headless=not args.headed,
+                browser_name=args.browser,
+            )
+        except Exception as exc:
+            print(f"ocu: {exc}", file=sys.stderr)
+            return 1
+        return 0
+
+    parser.error(f"unknown command {args.command}")
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

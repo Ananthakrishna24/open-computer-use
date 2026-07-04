@@ -1,0 +1,50 @@
+[
+  {
+    "id": 0,
+    "role": "link",
+    "text": "Home",
+    "bbox": [10, 10, 60, 20],
+    "source": "dom",
+    "state": {"visible": true, "interactive": true, "structural_path": "nav>a:nth-of-type(1)"}
+  },
+  {
+    "id": 0,
+    "role": "input",
+    "text": "Search products",
+    "bbox": [90, 10, 240, 32],
+    "source": "dom",
+    "state": {"visible": true, "interactive": true, "structural_path": "form>input:nth-of-type(1)"}
+  },
+  {
+    "id": 0,
+    "role": "button",
+    "text": "Search",
+    "bbox": [340, 10, 90, 32],
+    "source": "dom",
+    "state": {"visible": true, "interactive": true, "structural_path": "form>button:nth-of-type(1)"}
+  },
+  {
+    "id": 0,
+    "role": "button",
+    "text": "Add to cart",
+    "bbox": [20, 120, 150, 36],
+    "source": "dom",
+    "state": {"visible": true, "interactive": true, "structural_path": "main>button:nth-of-type(1)"}
+  },
+  {
+    "id": 0,
+    "role": "button",
+    "text": "Checkout",
+    "bbox": [20, 180, 150, 36],
+    "source": "dom",
+    "state": {"visible": true, "interactive": true, "disabled": true, "structural_path": "main>button:nth-of-type(2)"}
+  },
+  {
+    "id": 0,
+    "role": "text",
+    "text": "Your cart is empty",
+    "bbox": [20, 240, 250, 24],
+    "source": "dom",
+    "state": {"visible": true, "structural_path": "main>p:nth-of-type(1)"}
+  }
+]
