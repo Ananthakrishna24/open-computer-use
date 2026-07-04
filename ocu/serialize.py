@@ -128,6 +128,8 @@ def format_change_suffix(old: Element, new: Element) -> str:
         changes.append("now disabled" if new.state.get("disabled") else "now enabled")
     if old.state.get("checked") != new.state.get("checked") and new.state.get("checked") is not None:
         changes.append("now checked" if new.state.get("checked") else "now unchecked")
+    if old.state.get("value") != new.state.get("value"):
+        changes.append(f'value now "{_truncate(str(new.state.get("value") or ""), 40)}"')
     if old.state.get("focused") != new.state.get("focused") and new.state.get("focused"):
         changes.append("now focused")
     if old.bbox != new.bbox:

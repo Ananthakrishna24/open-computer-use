@@ -51,8 +51,8 @@ DOM_SNAPSHOT_SCRIPT = r"""
     }
     const title = clean(node.getAttribute("title"));
     if (title) return title;
-    if ((tag === "input" || tag === "textarea" || tag === "select") && interactiveRoles.has(role)) {
-      return clean(node.value || node.placeholder || "");
+    if ((tag === "input" || tag === "textarea") && interactiveRoles.has(role)) {
+      return clean(node.placeholder || "");
     }
     const alt = clean(node.getAttribute("alt"));
     if (alt) return alt;

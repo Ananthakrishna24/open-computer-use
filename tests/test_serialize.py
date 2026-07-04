@@ -27,6 +27,19 @@ class SerializerTests(unittest.TestCase):
         self.assertIn("now enabled", obs.text)
         self.assertIn("unchanged:", obs.text)
 
+    def test_delta_reports_value_change_with_stable_id(self) -> None:
+        store = StateStore(change_threshold=1.0)
+        state = {"interactive": True, "visible": True, "structural_path": "input:nth-of-type(1)", "value": ""}
+        store.ingest([Element(0, "input", "Search products", (10, 10, 200, 30), "dom", state)])
+        update = store.ingest(
+            [Element(0, "input", "Search products", (10, 10, 200, 30), "dom", {**state, "value": "wireless mouse"})],
+            last_action="type [1] 'wireless mouse'",
+        )
+        obs = observation_from_update(update, max_tokens=1500)
+        self.assertIn('~ [1]  input', obs.text)
+        self.assertIn('value now "wireless mouse"', obs.text)
+        self.assertNotIn("- [1]", obs.text)
+
     def test_budget_is_enforced_with_explicit_omission(self) -> None:
         store = StateStore()
         elements = [
