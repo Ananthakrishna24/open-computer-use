@@ -33,10 +33,13 @@ class OpenRouterTests(unittest.TestCase):
             self.assertTrue(models, tier)
             for model in models:
                 self.assertRegex(model, r"^[a-z0-9-]+/[a-z0-9.-]+$")
-        self.assertEqual(openrouter.DEFAULT_MODEL, openrouter.MODELS["balanced"][0])
+        self.assertEqual(openrouter.DEFAULT_MODEL, "google/gemini-2.5-flash-lite")
+        self.assertEqual(openrouter.DEFAULT_MODEL, openrouter.MODELS["fast"][0])
+        self.assertEqual(openrouter.ESCALATION_MODEL, "google/gemini-3-flash-preview")
 
     def test_pick_model(self) -> None:
-        self.assertEqual(openrouter.pick_model("fast"), openrouter.MODELS["fast"][0])
+        self.assertEqual(openrouter.pick_model(), openrouter.DEFAULT_MODEL)
+        self.assertEqual(openrouter.pick_model("balanced"), openrouter.MODELS["balanced"][0])
         with self.assertRaises(ValueError):
             openrouter.pick_model("galactic")
 
@@ -53,9 +56,21 @@ class OpenRouterTests(unittest.TestCase):
         self.assertEqual(openrouter.dispatch(env, tool_call), "acted")
 
     def test_create_client_requires_key(self) -> None:
-        with patch.dict(os.environ, {}, clear=True):
+        with patch.dict(os.environ, {}, clear=True), patch.object(openrouter, "_load_env", lambda: None):
             with self.assertRaises(RuntimeError):
                 openrouter.create_client()
+
+    def test_load_env_fills_missing_key_only(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            env_file = Path(tmp) / ".env"
+            env_file.write_text("# comment\nOPENROUTER_API_KEY='sk-test'\nEMPTY=\n")
+            with patch.dict(os.environ, {}, clear=True), patch.object(Path, "cwd", staticmethod(lambda: Path(tmp))):
+                openrouter._load_env()
+                self.assertEqual(os.environ.get("OPENROUTER_API_KEY"), "sk-test")
+                self.assertNotIn("EMPTY", os.environ)
 
 
 if __name__ == "__main__":
