@@ -13,6 +13,8 @@ ACTION_VERBS = {
     "scroll",
     "drag",
     "wait",
+    "goto",
+    "back",
     "observe",
     "done",
 }
@@ -143,18 +145,25 @@ class Action:
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "Action":
-        known = {"verb", "action", "target", "id", "element", "element_id", "coordinate", "text", "value"}
+        known = {"verb", "action", "target", "id", "element", "element_id", "coordinate", "text", "value", "url"}
         target = next(
             (value[key] for key in ("target", "id", "element", "element_id") if value.get(key) is not None),
             None,
         )
+        coordinate = value.get("coordinate")
+        if isinstance(target, (list, tuple)):
+            if coordinate is None and len(target) == 2:
+                coordinate = target
+            target = None
         text = value.get("text")
         if text is None:
             text = value.get("value")
+        if text is None:
+            text = value.get("url")
         return cls(
             verb=value.get("verb") or value.get("action") or "",
             target=target,
-            coordinate=value.get("coordinate"),
+            coordinate=coordinate,
             text=text,
             metadata={k: v for k, v in value.items() if k not in known},
         )
@@ -172,6 +181,6 @@ class Action:
             target = f" {self.coordinate}"
         else:
             target = ""
-        if self.text and self.verb in {"type", "press"}:
+        if self.text and self.verb in {"type", "press", "goto"}:
             return f"{self.verb}{target} {self.text!r}"
         return f"{self.verb}{target}"

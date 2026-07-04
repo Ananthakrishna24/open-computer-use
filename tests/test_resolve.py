@@ -46,6 +46,18 @@ class ActionCoerceTests(unittest.TestCase):
         action = Action.coerce({"verb": "scroll", "dy": 300})
         self.assertEqual(action.metadata, {"dy": 300})
 
+    def test_coordinate_in_target_field_moves_to_coordinate(self) -> None:
+        action = Action.coerce({"verb": "click", "target": [579, 220]})
+        self.assertIsNone(action.target)
+        self.assertEqual(action.coordinate, (579, 220))
+
+    def test_goto_url_alias_and_untargeted_resolution(self) -> None:
+        action = Action.coerce({"verb": "goto", "url": "https://example.test"})
+        self.assertEqual(action.text, "https://example.test")
+        resolved = Resolver({}).resolve(action)
+        self.assertIsNone(resolved.coordinate)
+        self.assertIsNone(Resolver({}).resolve(Action("back")).coordinate)
+
 
 if __name__ == "__main__":
     unittest.main()

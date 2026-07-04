@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from ocu import Browser
-from ocu.env import BLOCKED_URL_PATTERNS, PROBE_SCRIPT
+from ocu.env import BLOCKED_URL_PATTERNS, PROBE_SCRIPT, TEXT_SCRIPT
 
 
 class FakeClient:
@@ -35,6 +35,8 @@ class FakePage:
         self.mouse = self
 
     def evaluate(self, script, arg=None):
+        if script is TEXT_SCRIPT:
+            return "Latest release:\n  Python 3.99.0"
         if script is PROBE_SCRIPT:
             self.probe_calls.append(arg)
             if self.probes:
@@ -67,6 +69,12 @@ class FakePage:
 
     def wait_for_timeout(self, milliseconds):
         self.client.events.append(("wait", {"ms": milliseconds}))
+
+    def goto(self, url, wait_until=None):
+        self.client.events.append(("goto", {"url": url}))
+
+    def go_back(self, wait_until=None):
+        self.client.events.append(("back", {}))
 
 
 def payload(elements, url="https://shop.test/cart"):
@@ -198,6 +206,25 @@ class BrowserFacadeTests(unittest.TestCase):
         )
         self.assertEqual(page.probe_calls, [])
         self.assertEqual(page.snapshot_calls, 2)
+
+    def test_goto_navigates_and_prefixes_scheme(self) -> None:
+        page = FakePage([payload([button()]), payload([button()], url="https://other.test/")])
+        env = Browser(page=page, max_obs_tokens=1500, block_resources=False)
+        env.observe()
+        result = env.act("goto", text="other.test")
+        self.assertIn(("goto", {"url": "https://other.test"}), page.client.events)
+        self.assertIn("url: https://other.test/", result.text)
+        self.assertIn("url_changed", result.text)
+
+    def test_observe_text_returns_page_text_without_new_frame(self) -> None:
+        page = FakePage([payload([button()])])
+        env = Browser(page=page, max_obs_tokens=1500, block_resources=False)
+        env.observe()
+        result = env.observe(mode="text")
+        self.assertIn("## page text", result.text)
+        self.assertIn("Latest release: Python 3.99.0", result.text)
+        self.assertEqual(result.frame, 1)
+        self.assertEqual(page.snapshot_calls, 1)
 
     def test_resource_blocking_enabled_by_default(self) -> None:
         page = FakePage([payload([button()])])

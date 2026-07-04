@@ -25,6 +25,10 @@ class CdpExecutor:
             self._drag(action, target)
         elif action.verb == "wait":
             self._wait(action)
+        elif action.verb == "goto":
+            self._goto(action)
+        elif action.verb == "back":
+            self._back()
         elif action.verb in {"observe", "done"}:
             return
         else:
@@ -81,6 +85,18 @@ class CdpExecutor:
         self.page.mouse.down()
         self.page.mouse.move(end_x, end_y)
         self.page.mouse.up()
+
+    def _goto(self, action: Action) -> None:
+        url = action.text or action.metadata.get("url")
+        if not url:
+            raise ValueError("goto requires a url in text")
+        url = str(url)
+        if "://" not in url:
+            url = "https://" + url
+        self.page.goto(url, wait_until="domcontentloaded")
+
+    def _back(self) -> None:
+        self.page.go_back(wait_until="domcontentloaded")
 
     def _wait(self, action: Action) -> None:
         milliseconds = int(action.metadata.get("ms", action.metadata.get("milliseconds", 500)))

@@ -9,11 +9,14 @@ FUNCTIONS = [
         "type": "function",
         "function": {
             "name": "observe",
-            "description": "Refresh the screen observation. Use full for recovery or region for zoom.",
+            "description": (
+                "Refresh the screen observation. full lists elements for acting, "
+                "text returns the readable page text for reading content, region zooms."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "mode": {"type": "string", "enum": ["full", "region"], "default": "full"},
+                    "mode": {"type": "string", "enum": ["full", "text", "region"], "default": "full"},
                     "region": {
                         "type": "array",
                         "items": {"type": "integer"},
@@ -29,7 +32,10 @@ FUNCTIONS = [
         "type": "function",
         "function": {
             "name": "act",
-            "description": "Execute one or more grounded actions and return the screen delta.",
+            "description": (
+                "Execute one or more grounded actions and return the screen delta. "
+                "goto navigates to the URL given in text; back returns to the previous page."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -41,7 +47,18 @@ FUNCTIONS = [
                             "properties": {
                                 "verb": {
                                     "type": "string",
-                                    "enum": ["click", "type", "press", "scroll", "drag", "wait", "observe", "done"],
+                                    "enum": [
+                                        "click",
+                                        "type",
+                                        "press",
+                                        "scroll",
+                                        "drag",
+                                        "wait",
+                                        "goto",
+                                        "back",
+                                        "observe",
+                                        "done",
+                                    ],
                                 },
                                 "target": {"type": ["integer", "null"]},
                                 "coordinate": {

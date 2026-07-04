@@ -6,9 +6,9 @@ from typing import Any, Iterable, Mapping
 
 from .executors import CdpExecutor
 from .resolve import ResolutionError, Resolver
-from .schema import Action, BBox
+from .schema import Action, BBox, Observation
 from .sensors import BrowserSensor
-from .serialize import observation_from_update
+from .serialize import estimate_tokens, observation_from_update
 from .state import FrameUpdate, StateStore
 
 BLOCKED_URL_PATTERNS = [
@@ -34,6 +34,8 @@ BLOCKED_URL_PATTERNS = [
     "*connect.facebook.net*",
     "*hotjar.com*",
 ]
+
+TEXT_SCRIPT = "() => document.body ? document.body.innerText : ''"
 
 PROBE_SCRIPT = r"""
 (arg) => {
@@ -102,10 +104,32 @@ class Browser:
         return self.observe(mode="full")
 
     def observe(self, mode: str = "auto", region: BBox | None = None):
+        if mode == "text":
+            return self._observe_text()
         effective_mode = "region" if region is not None else mode
         frame = self._capture(region=region)
         update = self.state.ingest(frame.elements, url=frame.url, mode=effective_mode)
         return observation_from_update(update, max_tokens=self.max_obs_tokens)
+
+    def _observe_text(self):
+        try:
+            raw = str(self.page.evaluate(TEXT_SCRIPT) or "")
+        except Exception:
+            raw = ""
+        url = getattr(self.page, "url", None)
+        header = f"## page text ({url})\n" if url else "## page text\n"
+        limit = max(self.max_obs_tokens * 4 - len(header), 0)
+        body = " ".join(raw.split())
+        if len(body) > limit:
+            body = body[:limit] + "\n... page text truncated"
+        text = header + body
+        return Observation(
+            frame=self.state.frame,
+            kind="key",
+            text=text,
+            elements=self.state.elements,
+            tokens=estimate_tokens(text),
+        )
 
     def act(
         self,
