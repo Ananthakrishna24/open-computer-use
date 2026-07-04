@@ -159,7 +159,11 @@ class BrowserFacadeTests(unittest.TestCase):
 
     def test_batch_aborts_when_next_target_disappears(self) -> None:
         page = FakePage(
-            [payload([button(), button("Checkout", "button:nth-of-type(2)", (10, 80, 100, 40))]), payload([button()])],
+            [
+                payload([button(), button("Checkout", "button:nth-of-type(2)", (10, 80, 100, 40))]),
+                payload([button()]),
+                payload([button()]),
+            ],
             probes=[
                 {"url": "https://shop.test/cart", "dialogs": 0, "rect": None},
                 {"url": "https://shop.test/cart", "dialogs": 0, "rect": None},
@@ -175,7 +179,33 @@ class BrowserFacadeTests(unittest.TestCase):
         )
         self.assertIn("aborted at step 2", result.text)
         self.assertIn("target [2] disappeared", result.text)
-        self.assertEqual(page.snapshot_calls, 2)
+        self.assertEqual(page.snapshot_calls, 3)
+
+    def test_batch_relocates_target_after_dom_shift(self) -> None:
+        moved = button("Checkout", "div:nth-of-type(2)>button:nth-of-type(1)", (10, 200, 100, 40))
+        page = FakePage(
+            [
+                payload([button(), button("Checkout", "button:nth-of-type(2)", (10, 80, 100, 40))]),
+                payload([button(), moved]),
+                payload([button(), moved]),
+            ],
+            probes=[
+                {"url": "https://shop.test/cart", "dialogs": 0, "rect": None},
+                {"url": "https://shop.test/cart", "dialogs": 0, "rect": None},
+            ],
+        )
+        env = Browser(page=page, max_obs_tokens=1500, change_threshold=1.0)
+        env.observe()
+        result = env.act_batch(
+            [
+                {"verb": "click", "target": 1},
+                {"verb": "click", "target": 2},
+            ]
+        )
+        self.assertIn("did: click [1]; click [2] -> ok", result.text)
+        presses = [event for event in page.client.events if event[1].get("type") == "mousePressed"]
+        self.assertEqual(presses[-1][1]["x"], 60)
+        self.assertEqual(presses[-1][1]["y"], 220)
 
     def test_batch_aborts_when_dialog_appears(self) -> None:
         page = FakePage(

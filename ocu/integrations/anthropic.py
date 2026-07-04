@@ -90,8 +90,8 @@ TOOLS = [
 
 
 def dispatch(env: Any, block: Any) -> str:
-    name, payload = _name_and_payload(block)
     try:
+        name, payload = _name_and_payload(block)
         if name == "observe":
             mode = payload.get("mode", "full")
             region = payload.get("region")

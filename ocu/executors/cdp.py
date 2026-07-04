@@ -79,9 +79,9 @@ class CdpExecutor:
             deadline -= 50
 
     def _press(self, action: Action) -> None:
-        key = action.text or action.metadata.get("key")
+        key = action.text or action.metadata.get("key") or action.metadata.get("press")
         if not key:
-            raise ValueError("press requires text/key")
+            raise ValueError('press needs the key name in text: {"verb": "press", "text": "Escape"}')
         self.page.keyboard.press(str(key))
 
     def _scroll(self, action: Action, target: ResolvedTarget) -> None:
@@ -96,7 +96,7 @@ class CdpExecutor:
             raise ValueError("drag requires a start: coordinate [x, y] (or a target id)")
         end = _point(action.metadata.get("to") or action.metadata.get("end"))
         if end is None:
-            raise ValueError("drag requires an end point: to [x, y]")
+            raise ValueError('drag needs both corners: {"verb": "drag", "coordinate": [x1, y1], "to": [x2, y2]}')
         start_x, start_y = target.coordinate
         end_x, end_y = end
         self.page.mouse.move(start_x, start_y)

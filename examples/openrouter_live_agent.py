@@ -53,7 +53,9 @@ SYSTEM_PROMPT = (
     "task is genuinely done or truly blocked.\n\n"
     "Grounding: target elements by their displayed [id] in the field named target. Batch "
     "predictable steps into a single act call, for example click, type, then press Enter. "
-    "If a batch aborts, read the delta to see what changed and adapt.\n\n"
+    "Keep batches short: at most 8 actions, each one different. Never repeat an action "
+    "hoping for a different result; read the returned delta and change your approach. "
+    "If a batch aborts, the did line names the failed step and why.\n\n"
     "Navigation: the goto verb opens any URL directly, given in the text field; back "
     "returns to the previous page. Use goto freely and proactively: to search the web use "
     "https://www.bing.com/search?q=your+query and never google.com or duckduckgo.com, "
@@ -260,6 +262,7 @@ class LiveOpenRouterAgent:
         budget: int = 2500,
         max_steps: int = 60,
         max_tokens: int = 1000,
+        temperature: float = 0.2,
         history_limit: int = 120,
         verbose: bool = False,
         headless: bool = False,
@@ -275,6 +278,7 @@ class LiveOpenRouterAgent:
         self.escalate_after = escalate_after
         self.max_steps = max_steps
         self.max_tokens = max_tokens
+        self.temperature = temperature
         self.history_limit = history_limit
         self.verbose = verbose
         self.pending_task: str | None = None
@@ -324,6 +328,7 @@ class LiveOpenRouterAgent:
             response = self.client.chat.completions.create(
                 model=self.vision_model,
                 max_tokens=self.max_tokens,
+                temperature=self.temperature,
                 messages=[
                     {
                         "role": "user",
@@ -355,14 +360,24 @@ class LiveOpenRouterAgent:
         active_model = self.model
         failures = 0
         nudges = 0
+        api_errors = 0
 
         for _ in range(self.max_steps):
             response = self.client.chat.completions.create(
                 model=active_model,
                 max_tokens=self.max_tokens,
+                temperature=self.temperature,
                 tools=LIVE_TOOLS,
                 messages=self.messages,
             )
+            if not getattr(response, "choices", None):
+                api_errors += 1
+                if api_errors >= 3:
+                    detail = getattr(response, "error", None) or "no choices in response"
+                    return f"stopped: the model API kept failing ({detail})"
+                sleep(2 * api_errors)
+                continue
+            api_errors = 0
             message = response.choices[0].message
             self.messages.append(message)
 
@@ -470,6 +485,7 @@ if __name__ == "__main__":
     parser.add_argument("--vision-model", default=VISION_MODEL)
     parser.add_argument("--max-steps", type=int, default=60)
     parser.add_argument("--max-tokens", type=int, default=1000)
+    parser.add_argument("--temperature", type=float, default=0.2)
     parser.add_argument("--budget", type=int, default=2500)
     parser.add_argument("--browser", default="chromium")
     parser.add_argument("--headless", action="store_true")
@@ -488,6 +504,7 @@ if __name__ == "__main__":
         budget=args.budget,
         max_steps=args.max_steps,
         max_tokens=args.max_tokens,
+        temperature=args.temperature,
         verbose=args.verbose,
         headless=args.headless,
         browser_name=args.browser,

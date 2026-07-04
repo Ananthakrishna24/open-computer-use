@@ -156,6 +156,11 @@ class Browser:
         coerced = [Action.coerce(action) for action in actions]
         if not coerced:
             return self.observe(mode="delta")
+        if len(coerced) > 16:
+            raise ValueError(
+                f"batch of {len(coerced)} actions rejected: send at most 16 distinct actions, "
+                "never the same action repeated"
+            )
         if not self.state.elements:
             self.observe(mode="full")
 
@@ -177,11 +182,29 @@ class Browser:
                     if reason:
                         return self._finish(labels, aborted_step=index, note=reason)
 
-            target = Resolver(self.state.elements).resolve(action)
-            if probe and probe.get("rect") and action.target is not None:
-                x, y, width, height = probe["rect"]
-                target = replace(target, coordinate=(x + width // 2, y + height // 2))
-            self.executor.execute(action, target)
+            relocated = None
+            if (
+                probe is not None
+                and action.target is not None
+                and self._probe_path(action)
+                and probe.get("rect") is None
+            ):
+                relocated = self._relocate(action.target)
+                if relocated is None:
+                    return self._finish(
+                        labels, aborted_step=index, note=f"target [{action.target}] disappeared"
+                    )
+
+            try:
+                target = Resolver(self.state.elements).resolve(action)
+                if probe and probe.get("rect") and action.target is not None:
+                    x, y, width, height = probe["rect"]
+                    target = replace(target, coordinate=(x + width // 2, y + height // 2))
+                elif relocated is not None:
+                    target = replace(target, coordinate=relocated)
+                self.executor.execute(action, target)
+            except Exception as exc:
+                return self._finish(labels, aborted_step=index, note=f"{action.label()} failed: {exc}")
             labels.append(action.label())
 
         return self._finish(labels)
@@ -253,9 +276,26 @@ class Browser:
                 return "url_changed"
             if int(probe.get("dialogs") or 0) > int(baseline.get("dialogs") or 0):
                 return "dialog_or_alert_appeared"
-        if action.target is not None and self._probe_path(action) and probe.get("rect") is None:
-            return f"target [{action.target}] disappeared"
         return None
+
+    def _relocate(self, target_id: int) -> tuple[int, int] | None:
+        element = self.state.elements.get(target_id)
+        if element is None:
+            return None
+        try:
+            frame = self.sensor.capture()
+        except Exception:
+            return None
+        best: tuple[int, tuple[int, int]] | None = None
+        for candidate in frame.elements:
+            if candidate.role != element.role or candidate.text != element.text:
+                continue
+            dx = candidate.center[0] - element.center[0]
+            dy = candidate.center[1] - element.center[1]
+            distance = dx * dx + dy * dy
+            if best is None or distance < best[0]:
+                best = (distance, candidate.center)
+        return best[1] if best else None
 
     def _new_page(self, *, browser_name: str, headless: bool, launch_options: dict[str, Any]) -> Any:
         try:

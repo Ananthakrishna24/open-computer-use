@@ -148,6 +148,7 @@ class Action:
         known = {
             "verb", "action", "target", "id", "element", "element_id",
             "coordinate", "text", "value", "url", "from", "start", "to", "end",
+            "drag", "destination", "to_coordinate", "end_coordinate",
         }
         target = next(
             (value[key] for key in ("target", "id", "element", "element_id") if value.get(key) is not None),
@@ -163,11 +164,23 @@ class Action:
                 (value[key] for key in ("from", "start") if value.get(key) is not None),
                 None,
             )
-        to = next((value[key] for key in ("to", "end") if value.get(key) is not None), None)
-        if isinstance(coordinate, (list, tuple)) and len(coordinate) == 4:
-            if to is None:
-                to = list(coordinate[2:])
-            coordinate = list(coordinate[:2])
+        to = next(
+            (
+                value[key]
+                for key in ("to", "end", "destination", "to_coordinate", "end_coordinate", "drag")
+                if isinstance(value.get(key), (list, tuple, dict))
+            ),
+            None,
+        )
+        if isinstance(coordinate, (list, tuple)):
+            if len(coordinate) == 4:
+                if to is None:
+                    to = list(coordinate[2:])
+                coordinate = list(coordinate[:2])
+            elif len(coordinate) == 2 and isinstance(coordinate[0], (list, tuple)):
+                if to is None:
+                    to = list(coordinate[1])
+                coordinate = list(coordinate[0])
         text = value.get("text")
         if text is None:
             text = value.get("value")

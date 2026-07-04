@@ -98,8 +98,8 @@ TOOLS = FUNCTIONS
 
 
 def dispatch(env: Any, tool_call: Any) -> str:
-    name, payload = _name_and_payload(tool_call)
     try:
+        name, payload = _name_and_payload(tool_call)
         if name == "observe":
             region = payload.get("region")
             return env.observe(mode=payload.get("mode", "full"), region=tuple(region) if region else None).text
@@ -128,5 +128,10 @@ def _name_and_payload(tool_call: Any) -> tuple[str, dict[str, Any]]:
 
 def _loads(value: Any) -> dict[str, Any]:
     if isinstance(value, str):
-        return dict(json.loads(value or "{}"))
+        try:
+            return dict(json.loads(value or "{}"))
+        except ValueError as exc:
+            raise ValueError(
+                "tool arguments were not valid JSON (likely truncated); retry with a smaller batch of actions"
+            ) from exc
     return dict(value or {})
