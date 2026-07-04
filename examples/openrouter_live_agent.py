@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import json
 import sys
 from pathlib import Path
 from time import sleep
@@ -10,10 +12,35 @@ if __package__ is None or __package__ == "":
 
 from ocu import Browser
 from ocu.executors.cdp import CdpExecutor
-from ocu.integrations.openrouter import ESCALATION_MODEL, TOOLS, create_client, dispatch
+from ocu.integrations.openrouter import TOOLS, create_client, dispatch
 
-LIVE_MODEL = ESCALATION_MODEL
-LIVE_ESCALATION_MODEL = "anthropic/claude-haiku-4.5"
+LIVE_MODEL = "google/gemma-4-26b-a4b-it"
+LIVE_ESCALATION_MODEL = "google/gemma-4-31b-it"
+VISION_MODEL = "google/gemma-4-31b-it"
+
+LOOK_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "look",
+        "description": (
+            "Screenshot the page and have a vision model answer a question about how it "
+            "looks. Use only when text observations cannot answer: images, photos, charts, "
+            "canvas content, icons, or visual layout."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "question": {
+                    "type": "string",
+                    "description": "What to look for or describe in the screenshot.",
+                }
+            },
+            "required": ["question"],
+        },
+    },
+}
+
+LIVE_TOOLS = TOOLS + [LOOK_TOOL]
 
 SYSTEM_PROMPT = (
     "You are a capable assistant driving a real, visible browser through two tools: "
@@ -39,6 +66,22 @@ SYSTEM_PROMPT = (
     "results, or any content-heavy page, call observe with mode text: it returns the "
     "readable page text. Research answers must come from that text, never from your "
     "own memory.\n\n"
+    "Vision: the look tool screenshots the page and answers a visual question through a "
+    "vision model. Use it only when text cannot answer: images, photos, charts, canvas, "
+    "icons, or how the page visually looks.\n\n"
+    "Canvas editors (Excalidraw and similar): drawn shapes never appear as elements; only "
+    "the canvas itself does, with its pixel area. First write down a short coordinate "
+    "plan for the whole drawing inside that area. To draw one shape: click its tool "
+    "button, then drag with coordinate [x1,y1] and to [x2,y2] as the shape's corners; "
+    "the editor usually reverts to the selection tool afterwards, so click the tool "
+    "button again before every new shape. For an arrow, click the arrow tool and drag "
+    "from the edge of one shape to the edge of the next, keeping a gap from other "
+    "shapes so it does not bind to the wrong one. To label: click the text tool, click "
+    "an empty spot (text placed on top of a shape binds to it), type the label, then "
+    "press Escape. Do not re-observe after every shape; deltas will look unchanged. "
+    "After several shapes, call look once with a question like 'describe the diagram: "
+    "which labeled boxes and arrows are visible?' and fix only what is wrong or "
+    "missing.\n\n"
     "Verification: before giving a final answer, confirm the key facts were actually "
     "visible in an observation. If you have not seen the evidence on screen, observe "
     "again or open the source instead of guessing. Report failures and dead ends "
@@ -212,10 +255,11 @@ class LiveOpenRouterAgent:
         *,
         model: str = LIVE_MODEL,
         escalation_model: str = LIVE_ESCALATION_MODEL,
+        vision_model: str = VISION_MODEL,
         escalate_after: int = 2,
         budget: int = 2500,
         max_steps: int = 60,
-        max_tokens: int = 600,
+        max_tokens: int = 1000,
         history_limit: int = 120,
         verbose: bool = False,
         headless: bool = False,
@@ -227,6 +271,7 @@ class LiveOpenRouterAgent:
         self.client = create_client()
         self.model = model
         self.escalation_model = escalation_model
+        self.vision_model = vision_model
         self.escalate_after = escalate_after
         self.max_steps = max_steps
         self.max_tokens = max_tokens
@@ -273,6 +318,39 @@ class LiveOpenRouterAgent:
             return self.chat(f"Continue this interrupted task: {task}")
         return self.chat("Continue from where you left off and finish the current task.")
 
+    def _look(self, question: str) -> str:
+        try:
+            image = base64.b64encode(self.env.screenshot()).decode()
+            response = self.client.chat.completions.create(
+                model=self.vision_model,
+                max_tokens=self.max_tokens,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": question},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:image/png;base64,{image}"},
+                            },
+                        ],
+                    }
+                ],
+            )
+            content = (response.choices[0].message.content or "").strip()
+            return content or "error: vision model returned an empty answer"
+        except Exception as exc:
+            return f"error: {exc}"
+
+    def _dispatch(self, tool_call: Any) -> str:
+        if tool_call.function.name == "look":
+            try:
+                args = json.loads(tool_call.function.arguments or "{}")
+            except ValueError:
+                args = {}
+            return self._look(args.get("question") or "Describe what is visible on the page.")
+        return dispatch(self.env, tool_call)
+
     def _run_loop(self, task: str) -> str:
         active_model = self.model
         failures = 0
@@ -282,7 +360,7 @@ class LiveOpenRouterAgent:
             response = self.client.chat.completions.create(
                 model=active_model,
                 max_tokens=self.max_tokens,
-                tools=TOOLS,
+                tools=LIVE_TOOLS,
                 messages=self.messages,
             )
             message = response.choices[0].message
@@ -301,7 +379,7 @@ class LiveOpenRouterAgent:
                 return content
 
             for tool_call in message.tool_calls:
-                result = dispatch(self.env, tool_call)
+                result = self._dispatch(tool_call)
                 if self.verbose:
                     print(f"--- {active_model}\n>>> {tool_call.function.name} {tool_call.function.arguments}\n{result}\n")
                 self.messages.append(
@@ -370,7 +448,10 @@ def run_repl(agent: LiveOpenRouterAgent, *, first_task: str | None = None, once:
             parts = task.split(maxsplit=1)
             if len(parts) == 2:
                 agent.model = parts[1]
-            print(f"model: {agent.model} (escalation: {agent.escalation_model})")
+            print(
+                f"model: {agent.model} (escalation: {agent.escalation_model}, "
+                f"vision: {agent.vision_model})"
+            )
             continue
 
         print(agent.chat(task))
@@ -386,8 +467,9 @@ if __name__ == "__main__":
     parser.add_argument("task", nargs="?")
     parser.add_argument("--model", default=LIVE_MODEL)
     parser.add_argument("--escalation-model", default=LIVE_ESCALATION_MODEL)
+    parser.add_argument("--vision-model", default=VISION_MODEL)
     parser.add_argument("--max-steps", type=int, default=60)
-    parser.add_argument("--max-tokens", type=int, default=600)
+    parser.add_argument("--max-tokens", type=int, default=1000)
     parser.add_argument("--budget", type=int, default=2500)
     parser.add_argument("--browser", default="chromium")
     parser.add_argument("--headless", action="store_true")
@@ -402,6 +484,7 @@ if __name__ == "__main__":
         args.url,
         model=args.model,
         escalation_model=args.escalation_model,
+        vision_model=args.vision_model,
         budget=args.budget,
         max_steps=args.max_steps,
         max_tokens=args.max_tokens,

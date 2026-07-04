@@ -11,22 +11,9 @@ BASE_URL = "https://openrouter.ai/api/v1"
 TOOLS = FUNCTIONS
 
 MODELS = {
-    "fast": [
-        "google/gemini-2.5-flash-lite",
-        "openai/gpt-4.1-nano",
-        "mistralai/mistral-small-3.2-24b-instruct",
-    ],
-    "balanced": [
-        "google/gemini-3-flash-preview",
-        "google/gemini-2.5-flash",
-        "anthropic/claude-haiku-4.5",
-        "openai/gpt-4.1-mini",
-    ],
-    "capable": [
-        "anthropic/claude-sonnet-4.5",
-        "google/gemini-2.5-pro",
-        "openai/gpt-4.1",
-    ],
+    "fast": ["google/gemma-4-26b-a4b-it"],
+    "balanced": ["google/gemma-4-31b-it"],
+    "capable": ["google/gemma-4-31b-it"],
 }
 
 DEFAULT_MODEL = MODELS["fast"][0]

@@ -33,9 +33,9 @@ class OpenRouterTests(unittest.TestCase):
             self.assertTrue(models, tier)
             for model in models:
                 self.assertRegex(model, r"^[a-z0-9-]+/[a-z0-9.-]+$")
-        self.assertEqual(openrouter.DEFAULT_MODEL, "google/gemini-2.5-flash-lite")
+        self.assertEqual(openrouter.DEFAULT_MODEL, "google/gemma-4-26b-a4b-it")
         self.assertEqual(openrouter.DEFAULT_MODEL, openrouter.MODELS["fast"][0])
-        self.assertEqual(openrouter.ESCALATION_MODEL, "google/gemini-3-flash-preview")
+        self.assertEqual(openrouter.ESCALATION_MODEL, "google/gemma-4-31b-it")
 
     def test_pick_model(self) -> None:
         self.assertEqual(openrouter.pick_model(), openrouter.DEFAULT_MODEL)

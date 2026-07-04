@@ -9,7 +9,8 @@ DOM_SNAPSHOT_SCRIPT = r"""
 async (arg) => {
   const region = arg && arg.region;
   const settle = arg && arg.settle;
-  if (settle) {
+  const root = document.documentElement;
+  if (settle && root) {
     await new Promise((resolve) => {
       let quietTimer = 0;
       const observer = new MutationObserver(() => {
@@ -23,7 +24,7 @@ async (arg) => {
         clearTimeout(capTimer);
         resolve();
       }
-      observer.observe(document.documentElement, {
+      observer.observe(root, {
         subtree: true, childList: true, attributes: true, characterData: true
       });
       quietTimer = setTimeout(done, settle.quiet);
@@ -57,6 +58,7 @@ async (arg) => {
       return "input";
     }
     if (tag === "img") return "image";
+    if (tag === "canvas") return "canvas";
     return "text";
   }
 
@@ -95,6 +97,7 @@ async (arg) => {
     const role = roleFor(node, tag);
     const text = labelFor(node, role, tag);
     const interactive = interactiveRoles.has(role) ||
+      role === "canvas" ||
       node.hasAttribute("onclick") ||
       (node.hasAttribute("tabindex") && node.getAttribute("tabindex") !== "-1");
 
@@ -144,7 +147,9 @@ async (arg) => {
     }
   }
 
-  walk(document.body, "", false);
+  if (document.body) {
+    walk(document.body, "", false);
+  }
 
   return {
     url: window.location.href,

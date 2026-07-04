@@ -145,7 +145,10 @@ class Action:
 
     @classmethod
     def from_mapping(cls, value: Mapping[str, Any]) -> "Action":
-        known = {"verb", "action", "target", "id", "element", "element_id", "coordinate", "text", "value", "url"}
+        known = {
+            "verb", "action", "target", "id", "element", "element_id",
+            "coordinate", "text", "value", "url", "from", "start", "to", "end",
+        }
         target = next(
             (value[key] for key in ("target", "id", "element", "element_id") if value.get(key) is not None),
             None,
@@ -155,17 +158,30 @@ class Action:
             if coordinate is None and len(target) == 2:
                 coordinate = target
             target = None
+        if coordinate is None:
+            coordinate = next(
+                (value[key] for key in ("from", "start") if value.get(key) is not None),
+                None,
+            )
+        to = next((value[key] for key in ("to", "end") if value.get(key) is not None), None)
+        if isinstance(coordinate, (list, tuple)) and len(coordinate) == 4:
+            if to is None:
+                to = list(coordinate[2:])
+            coordinate = list(coordinate[:2])
         text = value.get("text")
         if text is None:
             text = value.get("value")
         if text is None:
             text = value.get("url")
+        metadata = {k: v for k, v in value.items() if k not in known}
+        if to is not None:
+            metadata["to"] = to
         return cls(
             verb=value.get("verb") or value.get("action") or "",
             target=target,
             coordinate=coordinate,
             text=text,
-            metadata={k: v for k, v in value.items() if k not in known},
+            metadata=metadata,
         )
 
     @classmethod

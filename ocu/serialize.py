@@ -97,6 +97,9 @@ def format_element(element: Element, *, max_text: int = DEFAULT_MAX_TEXT) -> str
         body = f'[{element.id}]  {element.role:<8} "{text}"'
     else:
         body = f"[{element.id}]  {element.role:<8}"
+    if element.role == "canvas":
+        x, y, width, height = element.bbox
+        body = f"{body} area x={x} y={y} w={width} h={height}"
     if state:
         return f"{body}  ({state})"
     return body

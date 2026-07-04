@@ -75,15 +75,15 @@ class CdpExecutor:
 
     def _drag(self, action: Action, target: ResolvedTarget) -> None:
         if target.coordinate is None:
-            raise ValueError("drag requires a resolved start coordinate")
-        end = action.metadata.get("to") or action.metadata.get("end")
-        if not end or len(end) != 2:
-            raise ValueError("drag requires metadata {'to': [x, y]}")
+            raise ValueError("drag requires a start: coordinate [x, y] (or a target id)")
+        end = _point(action.metadata.get("to") or action.metadata.get("end"))
+        if end is None:
+            raise ValueError("drag requires an end point: to [x, y]")
         start_x, start_y = target.coordinate
-        end_x, end_y = int(end[0]), int(end[1])
+        end_x, end_y = end
         self.page.mouse.move(start_x, start_y)
         self.page.mouse.down()
-        self.page.mouse.move(end_x, end_y)
+        self.page.mouse.move(end_x, end_y, steps=12)
         self.page.mouse.up()
 
     def _goto(self, action: Action) -> None:
@@ -110,3 +110,11 @@ class CdpExecutor:
             return page.context.new_cdp_session(page)
         except Exception:
             return None
+
+
+def _point(value: Any) -> tuple[int, int] | None:
+    if isinstance(value, dict):
+        value = (value.get("x"), value.get("y"))
+    if isinstance(value, (list, tuple)) and len(value) == 2 and None not in value:
+        return (int(value[0]), int(value[1]))
+    return None

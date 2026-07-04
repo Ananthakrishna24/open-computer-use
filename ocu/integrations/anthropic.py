@@ -29,7 +29,8 @@ TOOLS = [
         "name": "act",
         "description": (
             "Execute one or more grounded actions and return the screen delta. "
-            "goto navigates to the URL given in text; back returns to the previous page."
+            "goto navigates to the URL given in text; back returns to the previous page. "
+            "drag presses at coordinate (or target center) and releases at to."
         ),
         "input_schema": {
             "type": "object",
@@ -61,6 +62,13 @@ TOOLS = [
                                 "items": {"type": "integer"},
                                 "minItems": 2,
                                 "maxItems": 2,
+                            },
+                            "to": {
+                                "type": ["array", "null"],
+                                "items": {"type": "integer"},
+                                "minItems": 2,
+                                "maxItems": 2,
+                                "description": "Drag end point [x, y].",
                             },
                             "text": {"type": ["string", "null"]},
                         },
