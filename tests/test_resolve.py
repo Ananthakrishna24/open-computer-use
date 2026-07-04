@@ -51,6 +51,26 @@ class ActionCoerceTests(unittest.TestCase):
         self.assertIsNone(action.target)
         self.assertEqual(action.coordinate, (579, 220))
 
+    def test_verb_as_key_infers_verb_and_payload(self) -> None:
+        action = Action.coerce({"goto": "https://excalidraw.com/"})
+        self.assertEqual(action.verb, "goto")
+        self.assertEqual(action.text, "https://excalidraw.com/")
+        action = Action.coerce({"press": "Escape"})
+        self.assertEqual(action.verb, "press")
+        self.assertEqual(action.text, "Escape")
+        action = Action.coerce({"click": 7})
+        self.assertEqual(action.verb, "click")
+        self.assertEqual(action.target, 7)
+        action = Action.coerce({"click": [100, 200]})
+        self.assertEqual(action.coordinate, (100, 200))
+        action = Action.coerce({"coordinate": [10, 20], "drag": [30, 40]})
+        self.assertEqual(action.verb, "drag")
+        self.assertEqual(action.coordinate, (10, 20))
+        self.assertEqual(action.metadata["to"], [30, 40])
+        action = Action.coerce({"wait": 250})
+        self.assertEqual(action.verb, "wait")
+        self.assertEqual(action.metadata["ms"], 250)
+
     def test_goto_url_alias_and_untargeted_resolution(self) -> None:
         action = Action.coerce({"verb": "goto", "url": "https://example.test"})
         self.assertEqual(action.text, "https://example.test")

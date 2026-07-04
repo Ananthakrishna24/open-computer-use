@@ -130,7 +130,10 @@ class Action:
     def __post_init__(self) -> None:
         verb = normalize_role(self.verb)
         if verb not in ACTION_VERBS:
-            raise ValueError(f"unsupported action verb {self.verb!r}")
+            raise ValueError(
+                f"unsupported action verb {self.verb!r}: every action needs a verb field, "
+                'e.g. {"verb": "goto", "text": "https://example.com"} or {"verb": "click", "target": 12}'
+            )
         object.__setattr__(self, "verb", verb)
         if self.target is not None:
             object.__setattr__(self, "target", int(self.target))
@@ -150,6 +153,14 @@ class Action:
             "coordinate", "text", "value", "url", "from", "start", "to", "end",
             "drag", "destination", "to_coordinate", "end_coordinate",
         }
+        verb = value.get("verb") or value.get("action") or ""
+        inferred = None
+        if not verb:
+            for candidate in ("click", "type", "press", "goto", "drag", "scroll", "wait", "back", "observe", "done"):
+                if candidate in value:
+                    verb = candidate
+                    inferred = value[candidate]
+                    break
         target = next(
             (value[key] for key in ("target", "id", "element", "element_id") if value.get(key) is not None),
             None,
@@ -190,11 +201,20 @@ class Action:
             to = [to.get("x"), to.get("y")]
             if None in to:
                 to = None
+        if inferred is not None and not isinstance(inferred, bool):
+            if isinstance(inferred, str) and text is None:
+                text = inferred
+            elif isinstance(inferred, (int, float)) and verb == "click" and target is None:
+                target = int(inferred)
+            elif isinstance(inferred, (list, tuple)) and len(inferred) == 2 and coordinate is None and verb != "drag":
+                coordinate = list(inferred)
         metadata = {k: v for k, v in value.items() if k not in known}
         if to is not None:
             metadata["to"] = to
+        if verb == "wait" and isinstance(inferred, (int, float)) and not isinstance(inferred, bool):
+            metadata.setdefault("ms", inferred)
         return cls(
-            verb=value.get("verb") or value.get("action") or "",
+            verb=verb,
             target=target,
             coordinate=coordinate,
             text=text,
