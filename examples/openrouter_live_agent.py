@@ -14,25 +14,24 @@ from ocu import Browser
 from ocu.executors.cdp import CdpExecutor
 from ocu.integrations.openrouter import TOOLS, create_client, dispatch
 
-LIVE_MODEL = "google/gemma-4-26b-a4b-it"
+LIVE_MODEL = "google/gemma-4-31b-it"
 LIVE_ESCALATION_MODEL = "google/gemma-4-31b-it"
-VISION_MODEL = "google/gemma-4-31b-it"
 
 LOOK_TOOL = {
     "type": "function",
     "function": {
         "name": "look",
         "description": (
-            "Screenshot the page and have a vision model answer a question about how it "
-            "looks. Use only when text observations cannot answer: images, photos, charts, "
-            "canvas content, icons, or visual layout."
+            "Attach a screenshot of the current page to the conversation so you can see "
+            "it yourself. Use it whenever text observations cannot answer: canvas "
+            "drawings, images, photos, charts, icons, or visual layout."
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "question": {
                     "type": "string",
-                    "description": "What to look for or describe in the screenshot.",
+                    "description": "What you want to check in the screenshot.",
                 }
             },
             "required": ["question"],
@@ -47,15 +46,16 @@ SYSTEM_PROMPT = (
     "observe and act. You work for the user across an ongoing conversation; the browser "
     "window persists between their messages, so always continue from the current page, "
     "login state, and anything the user did in it by hand.\n\n"
-    "Work loop: act, read the returned screen delta, decide, act again. Repeat until the "
-    "request is fully satisfied. Never stop halfway to ask what to do next; choose the "
-    "reasonable step yourself. Only produce a plain-text answer (no tool call) when the "
-    "task is genuinely done or truly blocked.\n\n"
-    "Grounding: target elements by their displayed [id] in the field named target. Batch "
-    "predictable steps into a single act call, for example click, type, then press Enter. "
-    "Keep batches short: at most 8 actions, each one different. Never repeat an action "
-    "hoping for a different result; read the returned delta and change your approach. "
-    "If a batch aborts, the did line names the failed step and why.\n\n"
+    "Work loop: act, then read what came back before acting again. Every act returns a "
+    "did line saying what actually executed, plus the screen delta. If the result is not "
+    "what you expected, change your approach instead of repeating the action. Never stop "
+    "halfway to ask what to do next; choose the reasonable step yourself. Only produce a "
+    "plain-text answer (no tool call) when the task is genuinely done or truly blocked.\n\n"
+    "Grounding: target elements by their displayed [id] in the field named target. "
+    "Typing replaces whatever text the field already contains, so to run a new search "
+    "just type the new query into the same box and press Enter. Batch predictable steps "
+    "into a single act call, for example click, type, then press Enter. Keep batches "
+    "short: at most 8 actions, each one different.\n\n"
     "Navigation: the goto verb opens any URL directly, given in the text field; back "
     "returns to the previous page. Use goto freely and proactively: to search the web use "
     "https://www.bing.com/search?q=your+query and never google.com or duckduckgo.com, "
@@ -68,27 +68,29 @@ SYSTEM_PROMPT = (
     "results, or any content-heavy page, call observe with mode text: it returns the "
     "readable page text. Research answers must come from that text, never from your "
     "own memory.\n\n"
-    "Vision: the look tool screenshots the page and answers a visual question through a "
-    "vision model. Use it only when text cannot answer: images, photos, charts, canvas, "
-    "icons, or how the page visually looks.\n\n"
+    "Vision: the look tool attaches a screenshot to the conversation so you see the page "
+    "with your own eyes. Use it whenever the truth is visual: canvas drawings, images, "
+    "charts, layout. For anything you drew, look is the only valid verification; element "
+    "deltas cannot see pixels.\n\n"
     "Canvas editors (Excalidraw and similar): drawn shapes never appear as elements; "
-    "only the canvas does, with its pixel area. Shapes must never overlap, so before "
-    "drawing write out the exact corner numbers for every box. Recipe for a diagram: "
-    "use one column of boxes, each 240 wide and 80 tall, all with left edge x=420, "
-    "and tops at y=120, then y=270, then y=420, and so on (150 apart) so boxes stay "
-    "far apart. Draw one box: click the shape tool button, then drag with coordinate "
-    "[420,120] and to [660,200]. Repeat tool click + drag for each box; the editor "
-    "falls back to the selection tool after every shape. Label a box: click the text "
-    "tool, click the box's center (for example [540,160]), type the label, press "
-    "Escape; text clicked on a box attaches and centers itself. Connect boxes: click "
-    "the arrow tool, then drag from a little below the upper box, [540,210], to a "
-    "little above the next box, [540,260]. Draw at most 5 boxes unless asked. When "
-    "done, call look with 'list every labeled box and arrow on the canvas; report "
-    "any overlaps or stray text' and fix what it reports before answering; for "
-    "drawing tasks look is the only valid verification.\n\n"
+    "only the canvas does, with its pixel area. Before drawing, plan concrete "
+    "coordinates for the whole diagram and use both dimensions of the canvas, keeping "
+    "shapes well apart. Size every shape to fit its label comfortably, at least 100 by "
+    "60 pixels; tiny shapes wrap their text vertically and become unreadable. Trees and "
+    "hierarchies spread horizontally: root centered near the top, its children far "
+    "apart below it, spacing halving each level so subtrees never overlap. To draw one shape: click its tool button, then drag with coordinate "
+    "[x1,y1] and to [x2,y2] as opposite corners; the editor reverts to the selection "
+    "tool after each shape, so one act call draws at most one shape: the tool click "
+    "followed by one drag, never several drags in a batch. For an arrow, click the "
+    "arrow tool and drag from the edge of one shape to the edge of the next. To put a "
+    "label inside a shape: click the text tool, click the shape's center (the label "
+    "binds and centers itself), type it, press Escape; click an empty spot instead for "
+    "free-standing text. Element deltas cannot see what you drew, but after every drag "
+    "a screenshot arrives automatically: check it against your plan and fix what is "
+    "wrong immediately, before drawing the next shape.\n\n"
     "Verification: before giving a final answer, confirm the key facts were actually "
-    "visible in an observation. If you have not seen the evidence on screen, observe "
-    "again or open the source instead of guessing. Report failures and dead ends "
+    "visible in an observation or screenshot. If you have not seen the evidence on "
+    "screen, observe or look again instead of guessing. Report failures and dead ends "
     "honestly instead of inventing results.\n\n"
     "If a site shows a CAPTCHA or bot verification, do not try to solve or bypass it. "
     "Stop using tools and tell the user to complete it manually; they will tell you to "
@@ -183,6 +185,22 @@ def _is_bot_check(text: str) -> bool:
     return any(marker in lowered for marker in BOT_CHECK_MARKERS)
 
 
+def _acts_on_pixels(arguments: str) -> bool:
+    try:
+        actions = json.loads(arguments or "{}").get("actions", [])
+    except ValueError:
+        return False
+    for action in actions:
+        if not isinstance(action, dict):
+            continue
+        verb = action.get("verb") or action.get("action")
+        if verb == "drag":
+            return True
+        if verb == "type" and action.get("target") is None and action.get("id") is None:
+            return True
+    return False
+
+
 def _asks_user_to_decide(text: str) -> bool:
     lowered = text.lower()
     markers = (
@@ -248,7 +266,9 @@ class VisibleCursorExecutor(CdpExecutor):
             self._move_cursor(*target.coordinate)
         super()._drag(action, target)
         end = action.metadata.get("to") or action.metadata.get("end")
-        if end and len(end) == 2:
+        if isinstance(end, dict):
+            end = (end.get("x"), end.get("y"))
+        if isinstance(end, (list, tuple)) and len(end) == 2 and None not in end:
             self._move_cursor(int(end[0]), int(end[1]), pulse=True)
 
 
@@ -259,7 +279,6 @@ class LiveOpenRouterAgent:
         *,
         model: str = LIVE_MODEL,
         escalation_model: str = LIVE_ESCALATION_MODEL,
-        vision_model: str = VISION_MODEL,
         escalate_after: int = 2,
         budget: int = 2500,
         max_steps: int = 60,
@@ -276,7 +295,6 @@ class LiveOpenRouterAgent:
         self.client = create_client()
         self.model = model
         self.escalation_model = escalation_model
-        self.vision_model = vision_model
         self.escalate_after = escalate_after
         self.max_steps = max_steps
         self.max_tokens = max_tokens
@@ -324,39 +342,31 @@ class LiveOpenRouterAgent:
             return self.chat(f"Continue this interrupted task: {task}")
         return self.chat("Continue from where you left off and finish the current task.")
 
-    def _look(self, question: str) -> str:
+    def _attach_screenshot(self, question: str) -> None:
+        for entry in self.messages:
+            if isinstance(entry, dict) and entry.get("role") == "user" and isinstance(entry.get("content"), list):
+                entry["content"] = "(older screenshot removed)"
         try:
             image = base64.b64encode(self.env.screenshot()).decode()
-            response = self.client.chat.completions.create(
-                model=self.vision_model,
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": question},
-                            {
-                                "type": "image_url",
-                                "image_url": {"url": f"data:image/png;base64,{image}"},
-                            },
-                        ],
-                    }
-                ],
-            )
-            content = (response.choices[0].message.content or "").strip()
-            return content or "error: vision model returned an empty answer"
         except Exception as exc:
-            return f"error: {exc}"
-
-    def _dispatch(self, tool_call: Any) -> str:
-        if tool_call.function.name == "look":
-            try:
-                args = json.loads(tool_call.function.arguments or "{}")
-            except ValueError:
-                args = {}
-            return self._look(args.get("question") or "Describe what is visible on the page.")
-        return dispatch(self.env, tool_call)
+            self.messages.append({"role": "user", "content": f"screenshot failed: {exc}"})
+            return
+        self.messages.append(
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"Screenshot of the current page. {question} "
+                            "State what you actually see in it; if that does not match "
+                            "your intent, fix it before continuing."
+                        ),
+                    },
+                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image}"}},
+                ],
+            }
+        )
 
     def _run_loop(self, task: str) -> str:
         active_model = self.model
@@ -395,8 +405,19 @@ class LiveOpenRouterAgent:
                     continue
                 return content
 
+            look_question = None
             for tool_call in message.tool_calls:
-                result = self._dispatch(tool_call)
+                if tool_call.function.name == "look":
+                    try:
+                        args = json.loads(tool_call.function.arguments or "{}")
+                    except ValueError:
+                        args = {}
+                    look_question = args.get("question") or "Describe what is visible on the page."
+                    result = "screenshot attached in the next message"
+                else:
+                    result = dispatch(self.env, tool_call)
+                    if look_question is None and _acts_on_pixels(tool_call.function.arguments or ""):
+                        look_question = "You just changed the page visually; compare the result against your plan."
                 if self.verbose:
                     print(f"--- {active_model}\n>>> {tool_call.function.name} {tool_call.function.arguments}\n{result}\n")
                 self.messages.append(
@@ -408,6 +429,8 @@ class LiveOpenRouterAgent:
                 failures = failures + 1 if _is_failure(result) else 0
                 if failures >= self.escalate_after:
                     active_model = self.escalation_model
+            if look_question is not None:
+                self._attach_screenshot(look_question)
 
         return "stopped: max steps reached"
 
@@ -465,10 +488,7 @@ def run_repl(agent: LiveOpenRouterAgent, *, first_task: str | None = None, once:
             parts = task.split(maxsplit=1)
             if len(parts) == 2:
                 agent.model = parts[1]
-            print(
-                f"model: {agent.model} (escalation: {agent.escalation_model}, "
-                f"vision: {agent.vision_model})"
-            )
+            print(f"model: {agent.model} (escalation: {agent.escalation_model})")
             continue
 
         print(agent.chat(task))
@@ -484,7 +504,6 @@ if __name__ == "__main__":
     parser.add_argument("task", nargs="?")
     parser.add_argument("--model", default=LIVE_MODEL)
     parser.add_argument("--escalation-model", default=LIVE_ESCALATION_MODEL)
-    parser.add_argument("--vision-model", default=VISION_MODEL)
     parser.add_argument("--max-steps", type=int, default=60)
     parser.add_argument("--max-tokens", type=int, default=1000)
     parser.add_argument("--temperature", type=float, default=0.2)
@@ -502,7 +521,6 @@ if __name__ == "__main__":
         args.url,
         model=args.model,
         escalation_model=args.escalation_model,
-        vision_model=args.vision_model,
         budget=args.budget,
         max_steps=args.max_steps,
         max_tokens=args.max_tokens,

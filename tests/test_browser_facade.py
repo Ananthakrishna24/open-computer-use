@@ -4,7 +4,7 @@ import unittest
 
 from ocu import Browser
 from ocu.env import BLOCKED_URL_PATTERNS, PROBE_SCRIPT, TEXT_SCRIPT
-from ocu.executors.cdp import FOCUS_SCRIPT
+from ocu.executors.cdp import FOCUS_SCRIPT, SELECT_ALL_SCRIPT
 
 
 class FakeClient:
@@ -39,6 +39,9 @@ class FakePage:
         if script is TEXT_SCRIPT:
             return "Latest release:\n  Python 3.99.0"
         if script is FOCUS_SCRIPT:
+            return True
+        if script is SELECT_ALL_SCRIPT:
+            self.client.events.append(("select_all", {}))
             return True
         if script is PROBE_SCRIPT:
             self.probe_calls.append(arg)

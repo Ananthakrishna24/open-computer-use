@@ -34,6 +34,7 @@ FUNCTIONS = [
             "name": "act",
             "description": (
                 "Execute one or more grounded actions and return the screen delta. "
+                "type replaces whatever text the field already contains. "
                 "goto navigates to the URL given in text; back returns to the previous page. "
                 "drag presses at coordinate (or target center) and releases at to."
             ),

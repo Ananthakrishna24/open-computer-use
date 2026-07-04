@@ -12,6 +12,16 @@ FOCUS_SCRIPT = (
     " || el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')); }"
 )
 
+SELECT_ALL_SCRIPT = (
+    "() => { const el = document.activeElement;"
+    " if (!el) return false;"
+    " if ((el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') && el.value)"
+    " { el.select(); return true; }"
+    " if (el.isContentEditable && el.textContent)"
+    " { window.getSelection().selectAllChildren(el); return true; }"
+    " return false; }"
+)
+
 
 class CdpExecutor:
     def __init__(self, page: Any) -> None:
@@ -61,6 +71,10 @@ class CdpExecutor:
         if target.coordinate is not None:
             self._click(target)
         self._wait_for_editable_focus()
+        try:
+            self.page.evaluate(SELECT_ALL_SCRIPT)
+        except Exception:
+            pass
         text = action.text or ""
         if self._client is not None:
             self._client.send("Input.insertText", {"text": text})

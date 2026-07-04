@@ -186,6 +186,10 @@ class Action:
             text = value.get("value")
         if text is None:
             text = value.get("url")
+        if isinstance(to, dict):
+            to = [to.get("x"), to.get("y")]
+            if None in to:
+                to = None
         metadata = {k: v for k, v in value.items() if k not in known}
         if to is not None:
             metadata["to"] = to
@@ -212,4 +216,8 @@ class Action:
             target = ""
         if self.text and self.verb in {"type", "press", "goto"}:
             return f"{self.verb}{target} {self.text!r}"
+        if self.verb == "drag":
+            end = self.metadata.get("to") or self.metadata.get("end")
+            if isinstance(end, (list, tuple)) and len(end) == 2:
+                return f"{self.verb}{target} to ({int(end[0])}, {int(end[1])})"
         return f"{self.verb}{target}"
