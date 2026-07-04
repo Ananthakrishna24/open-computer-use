@@ -170,7 +170,8 @@ class Browser:
 
         for index, action in enumerate(coerced, start=1):
             if action.verb == "observe":
-                return self.observe(mode="full")
+                mode = str(action.metadata.get("mode") or action.text or "full")
+                return self.observe(mode=mode if mode in {"full", "text", "delta"} else "full")
             if action.verb == "done":
                 return self.observe(mode="delta")
 
