@@ -39,6 +39,8 @@ def summarize(results: list[Result]) -> list[dict[str, Any]]:
 
     summaries = []
     for (suite, system, model), rows in sorted(groups.items()):
+        successes = sum(1 for row in rows if row.success)
+        total_cost = sum(row.cost_usd for row in rows)
         summaries.append(
             {
                 "suite": suite,
@@ -46,8 +48,10 @@ def summarize(results: list[Result]) -> list[dict[str, Any]]:
                 "model": model,
                 "tasks": len(rows),
                 "tokens_per_step": mean(row.tokens_per_step for row in rows),
+                "tokens_per_task": mean(row.input_tokens + row.output_tokens for row in rows),
                 "cost_per_task": mean(row.cost_usd for row in rows),
-                "success_rate": 100 * mean(1 if row.success else 0 for row in rows),
+                "success_rate": 100 * successes / len(rows),
+                "cost_per_success": total_cost / successes if successes else float("inf"),
             }
         )
     return summaries
@@ -57,13 +61,16 @@ def to_markdown(summaries: list[dict[str, Any]]) -> str:
     lines = [
         "# Benchmark Results",
         "",
-        "| Suite | System | Model | Tasks | tokens/step | $/task | success % |",
-        "|---|---|---|---:|---:|---:|---:|",
+        "| Suite | System | Model | Tasks | tokens/step | tokens/task | $/task | success % | $/success |",
+        "|---|---|---|---:|---:|---:|---:|---:|---:|",
     ]
     for row in summaries:
+        per_success = row["cost_per_success"]
         lines.append(
             "| {suite} | {system} | {model} | {tasks} | {tokens_per_step:.1f} | "
-            "{cost_per_task:.4f} | {success_rate:.1f} |".format(**row)
+            "{tokens_per_task:.0f} | {cost_per_task:.4f} | {success_rate:.1f} | {ps} |".format(
+                ps="—" if per_success == float("inf") else f"{per_success:.4f}", **row
+            )
         )
     return "\n".join(lines) + "\n"
 

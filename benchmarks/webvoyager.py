@@ -74,6 +74,132 @@ TASKS = [
         "task": "Report the description of this repository.",
         "expect": ["programming language"],
     },
+    {
+        "id": "books-tipping-price",
+        "url": "https://books.toscrape.com",
+        "task": "Find the book 'Tipping the Velvet' and report its price.",
+        "expect": ["53.74"],
+    },
+    {
+        "id": "books-soumission-price",
+        "url": "https://books.toscrape.com",
+        "task": "Find the book 'Soumission' and report its price.",
+        "expect": ["50.10"],
+    },
+    {
+        "id": "books-mystery-count",
+        "url": "https://books.toscrape.com",
+        "task": "Open the Mystery category and report how many results it lists in total.",
+        "expect": ["32"],
+    },
+    {
+        "id": "books-total-results",
+        "url": "https://books.toscrape.com",
+        "task": "Report the total number of results the home page catalogue lists.",
+        "expect": ["1000"],
+    },
+    {
+        "id": "books-page2-first",
+        "url": "https://books.toscrape.com",
+        "task": "Go to page 2 of the catalogue and report the title of the first book.",
+        "expect": ["in her wake"],
+    },
+    {
+        "id": "books-sharp-upc",
+        "url": "https://books.toscrape.com",
+        "task": "Open the product page for 'Sharp Objects' and report its UPC code.",
+        "expect": ["e00eb4fd7b871a48"],
+    },
+    {
+        "id": "quotes-second-author",
+        "url": "https://quotes.toscrape.com",
+        "task": "Report the author of the second quote on the page.",
+        "expect": ["rowling"],
+    },
+    {
+        "id": "quotes-page2-author",
+        "url": "https://quotes.toscrape.com",
+        "task": "Go to the next page of quotes and report the author of the first quote there.",
+        "expect": ["monroe"],
+    },
+    {
+        "id": "quotes-tag-love",
+        "url": "https://quotes.toscrape.com",
+        "task": "Open the 'love' tag page and report the author of the first quote listed.",
+        "expect": ["gide"],
+    },
+    {
+        "id": "quotes-einstein-born",
+        "url": "https://quotes.toscrape.com",
+        "task": "Open Albert Einstein's author page and report his date of birth.",
+        "expect": ["1879"],
+    },
+    {
+        "id": "quotes-top-tag",
+        "url": "https://quotes.toscrape.com",
+        "task": "Report the first tag listed in the Top Ten tags box.",
+        "expect": ["love"],
+    },
+    {
+        "id": "httpbin-author",
+        "url": "https://httpbin.org/html",
+        "task": "Report the author named in the page heading.",
+        "expect": ["melville"],
+    },
+    {
+        "id": "wiki-python-release",
+        "url": "https://en.wikipedia.org/wiki/Python_(programming_language)",
+        "task": "Report the year Python first appeared.",
+        "expect": ["1991"],
+    },
+    {
+        "id": "wiki-linux-creator",
+        "url": "https://en.wikipedia.org/wiki/Linux",
+        "task": "Report the surname of the person who created the Linux kernel.",
+        "expect": ["torvalds"],
+    },
+    {
+        "id": "wiki-apollo-year",
+        "url": "https://en.wikipedia.org/wiki/Apollo_11",
+        "task": "Report the year of the Apollo 11 Moon landing.",
+        "expect": ["1969"],
+    },
+    {
+        "id": "wiki-berners-lee-born",
+        "url": "https://en.wikipedia.org/wiki/Tim_Berners-Lee",
+        "task": "Report the year Tim Berners-Lee was born.",
+        "expect": ["1955"],
+    },
+    {
+        "id": "wiki-shakespeare-born",
+        "url": "https://en.wikipedia.org/wiki/William_Shakespeare",
+        "task": "Report the year William Shakespeare was born.",
+        "expect": ["1564"],
+    },
+    {
+        "id": "wiki-search-austen",
+        "url": "https://en.wikipedia.org",
+        "task": "Find who wrote 'Pride and Prejudice' and report the surname.",
+        "expect": ["austen"],
+    },
+    {
+        "id": "wiki-australia-capital",
+        "url": "https://en.wikipedia.org",
+        "task": "Find the capital city of Australia and report it.",
+        "expect": ["canberra"],
+    },
+    {
+        "id": "arxiv-attention-year",
+        "url": "https://arxiv.org/abs/1706.03762",
+        "task": "Report the year this paper was first submitted.",
+        "expect": ["2017"],
+    },
+    {
+        "id": "github-linux-desc",
+        "url": "https://github.com/torvalds/linux",
+        "task": "Report the description of this repository.",
+        "expect": ["kernel source tree"],
+    },
 ]
 
 EMPTY_REPLY_RETRY = (
@@ -85,9 +211,11 @@ OCU_SYSTEM_PROMPT = (
     "You control a real browser through two tools: observe and act. "
     "Target elements by their [id]. Batch predictable steps into one act call. "
     "The goto verb opens any URL given in text. To read content-heavy pages call "
-    "observe with mode text. Never ask the user questions; keep acting until the "
-    "task is done, then answer in plain text without calling tools, quoting the "
-    "requested fact exactly as seen on the page."
+    "observe with mode text; if the fact you need is not in the observation, scroll "
+    "or observe again instead of guessing. Never answer from memory: only report "
+    "facts that literally appeared in an observation. Never ask the user questions; "
+    "keep acting until the task is done, then answer in plain text without calling "
+    "tools, quoting the requested fact exactly as seen on the page."
 )
 
 SCREENSHOT_SYSTEM_PROMPT = (
@@ -200,6 +328,7 @@ def run_ocu(client, model, url, task, max_steps, meter):
             {"role": "user", "content": f"Task: {task}\n\n{env.observe().text}"},
         ]
         nudges = 0
+        last_failed_call = None
         for _ in range(max_steps):
             message = _completion(client, model, messages, TOOLS, meter)
             messages.append(message)
@@ -215,6 +344,17 @@ def run_ocu(client, model, url, task, max_steps, meter):
                 if VERBOSE:
                     print(f">>> {tool_call.function.name} {tool_call.function.arguments}\n{result}\n", flush=True)
                 messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": result})
+                call_key = (tool_call.function.name, tool_call.function.arguments)
+                failed = any(marker in result for marker in ("refused", "aborted", "failed", "error:"))
+                if failed and call_key == last_failed_call:
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": "That exact action already failed. Do not repeat it. "
+                            "Pick a different element id from the observation, or use goto with a URL.",
+                        }
+                    )
+                last_failed_call = call_key if failed else None
             _compact_observations(messages)
         return "stopped: max steps reached"
     finally:
@@ -273,6 +413,54 @@ def run_screenshot(client, model, url, task, max_steps, meter):
         env.close()
 
 
+def run_browser_use(client, model, url, task, max_steps, meter):
+    import asyncio
+    import os
+
+    os.environ.setdefault("ANONYMIZED_TELEMETRY", "false")
+    os.environ.setdefault("BROWSER_USE_LOGGING_LEVEL", "warning")
+    from browser_use import Agent, Browser
+    from browser_use.llm import ChatOpenAI
+
+    class MeteredChat(ChatOpenAI):
+        async def ainvoke(self, messages, output_format=None, **kwargs):
+            completion = await super().ainvoke(messages, output_format, **kwargs)
+            meter.steps += 1
+            usage = completion.usage
+            if usage is not None:
+                meter.input_tokens += usage.prompt_tokens or 0
+                meter.output_tokens += usage.completion_tokens or 0
+            return completion
+
+    async def _run():
+        llm = MeteredChat(
+            model=model,
+            base_url="https://openrouter.ai/api/v1",
+            api_key=client.api_key,
+            temperature=0.2,
+            add_schema_to_system_prompt=True,
+            dont_force_structured_output=True,
+        )
+        browser = Browser(headless=True)
+        agent = Agent(
+            task=f"Start at {url}. {task}",
+            llm=llm,
+            browser=browser,
+            use_vision=False,
+            use_judge=False,
+            calculate_cost=False,
+            generate_gif=False,
+            enable_signal_handler=False,
+        )
+        try:
+            history = await agent.run(max_steps=max_steps)
+            return history.final_result() or "no result"
+        finally:
+            await browser.kill()
+
+    return asyncio.run(_run())
+
+
 def cost_usd(model, input_tokens, output_tokens):
     price_in, price_out = PRICES_PER_M.get(model, (0.0, 0.0))
     return (input_tokens * price_in + output_tokens * price_out) / 1_000_000
@@ -283,9 +471,9 @@ def grade(answer, expect):
     return all(marker.casefold() in lowered for marker in expect)
 
 
-def run_suite(systems, model, max_steps, task_filter):
+def run_suite(systems, model, max_steps, task_filter, on_result=None):
     client = create_client()
-    runners = {"ocu": run_ocu, "screenshot": run_screenshot}
+    runners = {"ocu": run_ocu, "screenshot": run_screenshot, "browser-use": run_browser_use}
     results = []
     for spec in TASKS:
         if task_filter and spec["id"] not in task_filter:
@@ -297,19 +485,20 @@ def run_suite(systems, model, max_steps, task_filter):
             except Exception as exc:
                 answer = f"error: {exc}"
             success = grade(answer, spec["expect"])
-            results.append(
-                Result(
-                    suite="webvoyager-subset",
-                    system=system,
-                    model=model,
-                    task=spec["id"],
-                    input_tokens=meter.input_tokens,
-                    output_tokens=meter.output_tokens,
-                    steps=meter.steps,
-                    cost_usd=cost_usd(model, meter.input_tokens, meter.output_tokens),
-                    success=success,
-                )
+            result = Result(
+                suite="webvoyager-subset",
+                system=system,
+                model=model,
+                task=spec["id"],
+                input_tokens=meter.input_tokens,
+                output_tokens=meter.output_tokens,
+                steps=meter.steps,
+                cost_usd=cost_usd(model, meter.input_tokens, meter.output_tokens),
+                success=success,
             )
+            results.append(result)
+            if on_result is not None:
+                on_result(result)
             print(
                 f"[{spec['id']}] {system}: success={success} steps={meter.steps} "
                 f"tokens={meter.input_tokens}+{meter.output_tokens} answer={answer[:120]!r}",
@@ -333,15 +522,19 @@ def main():
     VERBOSE = args.verbose
     systems = [s.strip() for s in args.systems.split(",") if s.strip()]
     task_filter = {t.strip() for t in args.tasks.split(",") if t.strip()}
-    results = run_suite(systems, args.model, args.max_steps, task_filter)
 
-    existing = []
-    if args.out.exists():
-        existing = [Result(**row) for row in json.loads(args.out.read_text())]
-        replaced = {(r.system, r.model, r.task) for r in results}
-        existing = [r for r in existing if (r.system, r.model, r.task) not in replaced]
-    merged = existing + results
-    args.out.write_text(json.dumps([asdict(r) for r in merged], indent=2))
+    def save(result):
+        existing = []
+        if args.out.exists():
+            existing = [Result(**row) for row in json.loads(args.out.read_text())]
+        key = (result.system, result.model, result.task)
+        merged = [r for r in existing if (r.system, r.model, r.task) != key] + [result]
+        args.out.write_text(json.dumps([asdict(r) for r in merged], indent=2))
+        return merged
+
+    run_suite(systems, args.model, args.max_steps, task_filter, on_result=save)
+
+    merged = [Result(**row) for row in json.loads(args.out.read_text())] if args.out.exists() else []
     table = to_markdown(summarize(merged))
     args.table.write_text(table)
     print()

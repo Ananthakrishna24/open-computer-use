@@ -50,8 +50,12 @@ PROBE_SCRIPT = r"""
     let node = null;
     try { node = document.body.querySelector(":scope>" + arg.path); } catch (e) { node = null; }
     if (node) {
-      const r = node.getBoundingClientRect();
+      let r = node.getBoundingClientRect();
       if (r.width > 0 && r.height > 0) {
+        if (r.bottom < 0 || r.top > window.innerHeight || r.right < 0 || r.left > window.innerWidth) {
+          node.scrollIntoView({ block: "center", inline: "center", behavior: "instant" });
+          r = node.getBoundingClientRect();
+        }
         out.rect = [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)];
       }
     }
@@ -164,6 +168,11 @@ class Browser:
         if not self.state.elements:
             self.observe(mode="full")
 
+        try:
+            self.page.wait_for_load_state("load", timeout=2000)
+        except Exception:
+            pass
+
         guard_active = guard == "abort_on_unexpected_change"
         baseline = self._probe(None) if guard_active and len(coerced) > 1 else None
         labels: list[str] = []
@@ -175,10 +184,21 @@ class Browser:
             if action.verb == "done":
                 return self.observe(mode="delta")
 
+            if action.verb == "click" and action.target is not None:
+                element = self.state.elements.get(action.target)
+                if element is not None and not element.state.get("interactive", True):
+                    near = self._nearest_interactive(element)
+                    hint = f"; try [{near.id}] {near.role} '{near.text[:40]}'" if near else ""
+                    return self._finish(
+                        labels,
+                        aborted_step=index,
+                        note=f"click [{action.target}] refused: {element.role} is not interactive{hint}",
+                    )
+
             probe = None
-            if index > 1 and (guard_active or action.target is not None):
+            if guard_active or action.target is not None:
                 probe = self._probe(self._probe_path(action))
-                if guard_active:
+                if guard_active and index > 1:
                     reason = self._abort_reason(action, probe, baseline)
                     if reason:
                         return self._finish(labels, aborted_step=index, note=reason)
@@ -234,6 +254,10 @@ class Browser:
 
     def _capture(self, region: BBox | None = None, settle: dict[str, int] | None = None):
         try:
+            self.page.wait_for_load_state("load", timeout=2000)
+        except Exception:
+            pass
+        try:
             return self.sensor.capture(region=region, settle=settle)
         except Exception:
             try:
@@ -278,6 +302,18 @@ class Browser:
             if int(probe.get("dialogs") or 0) > int(baseline.get("dialogs") or 0):
                 return "dialog_or_alert_appeared"
         return None
+
+    def _nearest_interactive(self, element):
+        best = None
+        for candidate in self.state.elements.values():
+            if candidate.id == element.id or not candidate.state.get("interactive"):
+                continue
+            dx = candidate.center[0] - element.center[0]
+            dy = candidate.center[1] - element.center[1]
+            distance = dx * dx + dy * dy
+            if best is None or distance < best[0]:
+                best = (distance, candidate)
+        return best[1] if best else None
 
     def _relocate(self, target_id: int) -> tuple[int, int] | None:
         element = self.state.elements.get(target_id)

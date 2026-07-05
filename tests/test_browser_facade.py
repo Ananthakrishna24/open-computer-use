@@ -119,7 +119,8 @@ class BrowserFacadeTests(unittest.TestCase):
                         },
                     ]
                 ),
-            ]
+            ],
+            probes=[{"url": "https://shop.test/cart", "dialogs": 0, "rect": [10, 20, 100, 40]}],
         )
         env = Browser(page=page, max_obs_tokens=1500, change_threshold=1.0, block_resources=False)
         first = env.observe()
@@ -143,6 +144,7 @@ class BrowserFacadeTests(unittest.TestCase):
             [payload([search, button("Go", "button:nth-of-type(1)", (220, 10, 60, 30))]), payload([search])],
             probes=[
                 {"url": "https://shop.test/cart", "dialogs": 0, "rect": None},
+                {"url": "https://shop.test/cart", "dialogs": 0, "rect": [10, 10, 200, 30]},
                 {"url": "https://shop.test/cart", "dialogs": 0, "rect": [300, 10, 60, 30]},
             ],
         )
@@ -169,6 +171,7 @@ class BrowserFacadeTests(unittest.TestCase):
             ],
             probes=[
                 {"url": "https://shop.test/cart", "dialogs": 0, "rect": None},
+                {"url": "https://shop.test/cart", "dialogs": 0, "rect": [10, 20, 100, 40]},
                 {"url": "https://shop.test/cart", "dialogs": 0, "rect": None},
             ],
         )
@@ -194,6 +197,7 @@ class BrowserFacadeTests(unittest.TestCase):
             ],
             probes=[
                 {"url": "https://shop.test/cart", "dialogs": 0, "rect": None},
+                {"url": "https://shop.test/cart", "dialogs": 0, "rect": [10, 20, 100, 40]},
                 {"url": "https://shop.test/cart", "dialogs": 0, "rect": None},
             ],
         )
@@ -215,6 +219,7 @@ class BrowserFacadeTests(unittest.TestCase):
             [payload([button(), button("Checkout", "button:nth-of-type(2)", (10, 80, 100, 40))]), payload([button()])],
             probes=[
                 {"url": "https://shop.test/cart", "dialogs": 0, "rect": None},
+                {"url": "https://shop.test/cart", "dialogs": 0, "rect": [10, 20, 100, 40]},
                 {"url": "https://shop.test/cart", "dialogs": 1, "rect": [10, 80, 100, 40]},
             ],
         )
@@ -230,7 +235,10 @@ class BrowserFacadeTests(unittest.TestCase):
         self.assertIn("dialog_or_alert_appeared", result.text)
 
     def test_guard_none_skips_probes_for_untargeted_steps(self) -> None:
-        page = FakePage([payload([button()]), payload([button()])])
+        page = FakePage(
+            [payload([button()]), payload([button()])],
+            probes=[{"url": "https://shop.test/cart", "dialogs": 0, "rect": [10, 20, 100, 40]}],
+        )
         env = Browser(page=page, max_obs_tokens=1500, change_threshold=1.0)
         env.observe()
         env.act_batch(
@@ -240,7 +248,7 @@ class BrowserFacadeTests(unittest.TestCase):
             ],
             guard="none",
         )
-        self.assertEqual(page.probe_calls, [])
+        self.assertEqual(page.probe_calls, [{"path": "button:nth-of-type(1)"}])
         self.assertEqual(page.snapshot_calls, 2)
 
     def test_goto_navigates_and_prefixes_scheme(self) -> None:

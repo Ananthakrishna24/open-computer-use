@@ -1,11 +1,11 @@
 {
     "schema_version": 1,
-    "commit": "0a5c73fa6c3a45cd8ec0a0df8ddcd4365bd5c6f6",
-    "indexed_at": "2026-07-04T16:13:00Z",
+    "commit": "2ada4f3247e790cd78634384feab8b81fc2ba412",
+    "indexed_at": "2026-07-05T04:17:59Z",
     "project": "home-ananthakrishna-Documents-open-computer-use",
-    "nodes": 479,
-    "edges": 1574,
+    "nodes": 480,
+    "edges": 1952,
     "original_size": 3735552,
-    "compressed_size": 518345,
+    "compressed_size": 541010,
     "compression_level": 3
 }
