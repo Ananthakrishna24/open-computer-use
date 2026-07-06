@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import os
 from dataclasses import replace
 from time import sleep
 from typing import Any, Iterable, Mapping
 
-from .executors import CdpExecutor, XdotoolExecutor
+from .executors import CdpExecutor, XdotoolExecutor, YdotoolExecutor
 from .resolve import ResolutionError, Resolver
 from .schema import Action, BBox, Element, Observation
 from .sensors import AxLinuxSensor, BrowserSensor
@@ -334,6 +335,12 @@ class Browser:
         return self._browser.new_page()
 
 
+def _default_desktop_executor() -> Any:
+    if os.environ.get("WAYLAND_DISPLAY"):
+        return YdotoolExecutor()
+    return XdotoolExecutor()
+
+
 def _relocate_element(sensor: Any, elements: Mapping[int, Element], target_id: int) -> tuple[int, int] | None:
     element = elements.get(target_id)
     if element is None:
@@ -369,7 +376,7 @@ class Desktop:
         self.settle_ms = settle_ms
         self.state = StateStore(keyframe_interval=keyframe_interval, change_threshold=change_threshold)
         self.sensor = sensor if sensor is not None else AxLinuxSensor()
-        self.executor = executor if executor is not None else XdotoolExecutor()
+        self.executor = executor if executor is not None else _default_desktop_executor()
 
     def reset(self):
         self.state.reset()

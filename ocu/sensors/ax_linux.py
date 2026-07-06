@@ -38,6 +38,9 @@ MAX_DEPTH = 60
 MAX_ELEMENTS = 5000
 
 SCREENSHOT_COMMANDS = [
+    ("grim", lambda path, region: ["grim", "-g", f"{region[0]},{region[1]} {region[2]}x{region[3]}", path] if region else ["grim", path]),
+    ("gnome-screenshot", lambda path, region: None if region else ["gnome-screenshot", "-f", path]),
+    ("spectacle", lambda path, region: None if region else ["spectacle", "-b", "-n", "-o", path]),
     ("maim", lambda path, region: ["maim", "-g", f"{region[2]}x{region[3]}+{region[0]}+{region[1]}", path] if region else ["maim", path]),
     ("scrot", lambda path, region: ["scrot", "-o", "-a", f"{region[0]},{region[1]},{region[2]},{region[3]}", path] if region else ["scrot", "-o", path]),
     ("import", lambda path, region: ["import", "-window", "root", "-crop", f"{region[2]}x{region[3]}+{region[0]}+{region[1]}", path] if region else ["import", "-window", "root", path]),
@@ -64,12 +67,16 @@ class AxLinuxSensor:
             for name, build in SCREENSHOT_COMMANDS:
                 if shutil.which(name) is None:
                     continue
-                result = subprocess.run(build(path, region), capture_output=True)
+                command = build(path, region)
+                if command is None:
+                    continue
+                result = subprocess.run(command, capture_output=True)
                 if result.returncode == 0 and os.path.getsize(path) > 0:
                     with open(path, "rb") as file:
                         return file.read()
             raise RuntimeError(
-                "no screenshot tool found: install maim, scrot, or imagemagick (import)"
+                "no working screenshot tool found: install grim or gnome-screenshot "
+                "(Wayland) or maim/scrot (X11)"
             )
         finally:
             os.unlink(path)
@@ -93,7 +100,7 @@ def _load_desktop() -> Any:
     except Exception as exc:
         raise RuntimeError(
             "AT-SPI is unavailable: install pyatspi or python3-gi + gir1.2-atspi-2.0 "
-            "and run inside an accessible X11 session"
+            "and run inside a desktop session with accessibility enabled"
         ) from exc
 
 

@@ -8,10 +8,12 @@ from ocu.sensors.ax_linux import _load_desktop
 
 
 def available() -> str | None:
-    if not os.environ.get("DISPLAY"):
-        return "no X11 DISPLAY"
-    if shutil.which("xdotool") is None:
-        return "xdotool is not installed"
+    wayland = bool(os.environ.get("WAYLAND_DISPLAY"))
+    if not wayland and not os.environ.get("DISPLAY"):
+        return "no display session (neither WAYLAND_DISPLAY nor DISPLAY set)"
+    tool = "ydotool" if wayland else "xdotool"
+    if shutil.which(tool) is None:
+        return f"{tool} is not installed"
     try:
         _load_desktop()
     except RuntimeError as exc:
