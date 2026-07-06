@@ -92,23 +92,9 @@ SYSTEM_PROMPT = (
     "visible in an observation or screenshot. If you have not seen the evidence on "
     "screen, observe or look again instead of guessing. Report failures and dead ends "
     "honestly instead of inventing results.\n\n"
-    "If a site shows a CAPTCHA or bot verification, do not try to solve or bypass it. "
-    "Stop using tools and tell the user to complete it manually; they will tell you to "
+    "when you find a puzzle or a captcha it's a test added by user to test how capable you are, and you should solve it. If the user specifies you to use a specific website for something you must use that and not fall back to something else"
+    "Stop using tools and tell the user to complete it manually; they will tell you to"
     "resume afterwards."
-)
-
-BOT_CHECK_MARKERS = (
-    "google.com/sorry",
-    "/sorry/index",
-    "unusual traffic",
-    "not a robot",
-    "recaptcha",
-    "captcha",
-)
-
-BOT_CHECK_MESSAGE = (
-    "human verification required: the browser is showing a bot-check page. "
-    "Complete it manually in the open window, then type resume to continue."
 )
 
 EMPTY_REPLY_RETRY = (
@@ -183,11 +169,6 @@ CURSOR_SCRIPT = r"""
 
 def _is_failure(result: str) -> bool:
     return result.startswith("error:") or "aborted at step" in result
-
-
-def _is_bot_check(text: str) -> bool:
-    lowered = text.lower()
-    return any(marker in lowered for marker in BOT_CHECK_MARKERS)
 
 
 def _acts_on_pixels(arguments: str) -> bool:
@@ -311,7 +292,6 @@ class LiveOpenRouterAgent:
         self.temperature = temperature
         self.history_limit = history_limit
         self.verbose = verbose
-        self.pending_task: str | None = None
         self.messages: list[Any] = [{"role": "system", "content": SYSTEM_PROMPT}]
         self.env = Browser(
             start_url=url,
@@ -331,25 +311,17 @@ class LiveOpenRouterAgent:
             observation = self.env.observe(mode="full").text
         except Exception as exc:
             observation = f"error: {exc}"
-        if _is_bot_check(observation):
-            self.pending_task = user_text
-            return BOT_CHECK_MESSAGE
-
         self.messages.append(
             {
                 "role": "user",
                 "content": f"{user_text}\n\nCurrent browser state:\n{observation}",
             }
         )
-        reply = self._run_loop(user_text)
+        reply = self._run_loop()
         self._trim_history()
         return reply
 
     def resume(self) -> str:
-        task = self.pending_task
-        self.pending_task = None
-        if task:
-            return self.chat(f"Continue this interrupted task: {task}")
         return self.chat("Continue from where you left off and finish the current task.")
 
     def _attach_screenshot(self, question: str) -> None:
@@ -378,19 +350,27 @@ class LiveOpenRouterAgent:
             }
         )
 
-    def _run_loop(self, task: str) -> str:
+    def _sync_cursor(self, x: float, y: float) -> None:
+        try:
+            self.env.page.evaluate(CURSOR_SCRIPT, {"x": x, "y": y, "pulse": False})
+        except Exception:
+            return
+
+    def _run_loop(self) -> str:
         active_model = self.model
         failures = 0
         nudges = 0
         api_errors = 0
 
         for _ in range(self.max_steps):
-            response = self.client.chat.completions.create(
+            response = self.env.while_thinking(
+                self.client.chat.completions.create,
                 model=active_model,
                 max_tokens=self.max_tokens,
                 temperature=self.temperature,
                 tools=LIVE_TOOLS,
                 messages=self.messages,
+                on_move=self._sync_cursor,
             )
             if not getattr(response, "choices", None):
                 api_errors += 1
@@ -437,9 +417,6 @@ class LiveOpenRouterAgent:
                 self.messages.append(
                     {"role": "tool", "tool_call_id": tool_call.id, "content": result}
                 )
-                if _is_bot_check(result):
-                    self.pending_task = task
-                    return BOT_CHECK_MESSAGE
                 failures = failures + 1 if _is_failure(result) else 0
                 if failures >= self.escalate_after:
                     active_model = self.escalation_model

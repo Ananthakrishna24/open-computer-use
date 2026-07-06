@@ -276,6 +276,23 @@ class BrowserFacadeTests(unittest.TestCase):
         self.assertEqual(page.client.events[0], ("Network.enable", {}))
         self.assertEqual(page.client.events[1], ("Network.setBlockedURLs", {"urls": BLOCKED_URL_PATTERNS}))
 
+    def test_while_thinking_wanders_then_returns_result(self) -> None:
+        from time import sleep
+
+        page = FakePage([payload([button()])])
+        env = Browser(page=page, max_obs_tokens=1500, block_resources=False)
+        moves = []
+        env.page.mouse.move = lambda x, y: moves.append((x, y))
+
+        def slow():
+            sleep(0.25)
+            return "done"
+
+        result = env.while_thinking(slow)
+        self.assertEqual(result, "done")
+        self.assertTrue(moves)
+        self.assertFalse([m for m in moves if m[0] < 0 or m[1] < 0])
+
 
 if __name__ == "__main__":
     unittest.main()

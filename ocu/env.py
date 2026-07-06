@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import random
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from time import sleep
-from typing import Any, Iterable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from .executors import CdpExecutor
 from .resolve import ResolutionError, Resolver
@@ -89,6 +91,8 @@ class Browser:
         self._playwright = None
         self._browser = None
         self._owns_browser = False
+        self._think_pool: ThreadPoolExecutor | None = None
+        self._pointer: tuple[float, float] | None = None
 
         if page is None:
             page = self._new_page(browser_name=browser_name, headless=headless, launch_options=launch_options)
@@ -233,7 +237,56 @@ class Browser:
     def screenshot(self, region: BBox | None = None) -> bytes:
         return self.sensor.screenshot(region=region)
 
+    def while_thinking(
+        self,
+        fn: Callable[..., Any],
+        *args: Any,
+        on_move: Callable[[float, float], None] | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        if self._think_pool is None:
+            self._think_pool = ThreadPoolExecutor(max_workers=1)
+        future = self._think_pool.submit(fn, *args, **kwargs)
+        self._wander(future.done, on_move)
+        return future.result()
+
+    def _wander(self, done: Callable[[], bool], on_move: Callable[[float, float], None] | None = None) -> None:
+        viewport = getattr(self.page, "viewport_size", None) or {"width": 1280, "height": 720}
+        if self._pointer is None:
+            self._pointer = (viewport["width"] / 2, viewport["height"] / 2)
+        x, y = self._pointer
+        while not done():
+            tx = random.uniform(0.2, 0.8) * viewport["width"]
+            ty = random.uniform(0.25, 0.75) * viewport["height"]
+            cx = (x + tx) / 2 + random.uniform(-150, 150)
+            cy = (y + ty) / 2 + random.uniform(-100, 100)
+            steps = random.randint(16, 32)
+            for step in range(1, steps + 1):
+                if done():
+                    break
+                t = step / steps
+                t = t * t * (3 - 2 * t)
+                px = (1 - t) ** 2 * x + 2 * (1 - t) * t * cx + t * t * tx + random.uniform(-1.5, 1.5)
+                py = (1 - t) ** 2 * y + 2 * (1 - t) * t * cy + t * t * ty + random.uniform(-1.5, 1.5)
+                try:
+                    self.page.mouse.move(px, py)
+                    if on_move is not None:
+                        on_move(px, py)
+                except Exception:
+                    return
+                sleep(random.uniform(0.008, 0.022))
+            x, y = tx, ty
+            self._pointer = (x, y)
+            dwell = random.uniform(0.3, 1.4)
+            while dwell > 0:
+                if done():
+                    return
+                sleep(0.05)
+                dwell -= 0.05
+
     def close(self) -> None:
+        if self._think_pool is not None:
+            self._think_pool.shutdown(wait=False)
         if self._owns_browser and self._browser is not None:
             self._browser.close()
         if self._playwright is not None:
