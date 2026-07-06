@@ -45,6 +45,22 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(result, "acted")
         self.assertEqual(env.calls, [("act", [{"verb": "click", "target": 1}], "none")])
 
+    def test_openai_dispatch_repairs_invalid_json_arguments(self) -> None:
+        env = FakeEnv()
+        tool_call = SimpleNamespace(
+            id="call_1",
+            function=SimpleNamespace(name="act", arguments='{"actions": [{"type": "<|\\Input'),
+        )
+        result = openai.dispatch(env, tool_call)
+        self.assertIn("not valid JSON", result)
+        self.assertEqual(tool_call.function.arguments, "{}")
+        self.assertEqual(env.calls, [])
+
+        dict_call = {"function": {"name": "act", "arguments": '{"actions": ['}}
+        result = openai.dispatch(env, dict_call)
+        self.assertIn("not valid JSON", result)
+        self.assertEqual(dict_call["function"]["arguments"], "{}")
+
     def test_object_style_anthropic_block(self) -> None:
         env = FakeEnv()
         block = SimpleNamespace(name="act", input={"actions": [{"verb": "wait", "ms": 10}]})

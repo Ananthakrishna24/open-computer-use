@@ -101,6 +101,10 @@ TOOLS = FUNCTIONS
 def dispatch(env: Any, tool_call: Any) -> str:
     try:
         name, payload = _name_and_payload(tool_call)
+    except ValueError as exc:
+        _repair_arguments(tool_call)
+        return f"error: {exc}"
+    try:
         if name == "observe":
             region = payload.get("region")
             return env.observe(mode=payload.get("mode", "full"), region=tuple(region) if region else None).text
@@ -112,6 +116,19 @@ def dispatch(env: Any, tool_call: Any) -> str:
         return f"error: unknown tool {name!r}"
     except Exception as exc:
         return f"error: {exc}"
+
+
+def _repair_arguments(tool_call: Any) -> None:
+    function = tool_call.get("function") if isinstance(tool_call, Mapping) else getattr(tool_call, "function", None)
+    holder = function if function is not None else tool_call
+    if isinstance(holder, Mapping):
+        if isinstance(holder.get("arguments"), str):
+            try:
+                holder["arguments"] = "{}"
+            except TypeError:
+                pass
+    elif isinstance(getattr(holder, "arguments", None), str):
+        holder.arguments = "{}"
 
 
 def _name_and_payload(tool_call: Any) -> tuple[str, dict[str, Any]]:

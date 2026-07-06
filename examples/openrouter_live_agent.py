@@ -121,6 +121,11 @@ QUESTION_REPLY_RETRY = (
     "keep going until the task is done, then answer with what you found."
 )
 
+LEAKED_TOOL_CALL_RETRY = (
+    "Your last message wrote a tool call as plain text, so nothing executed. "
+    "Issue the tool call properly through the tools API and continue the task."
+)
+
 CURSOR_SCRIPT = r"""
 (arg) => {
   const cursorId = "ocu-live-cursor";
@@ -199,6 +204,11 @@ def _acts_on_pixels(arguments: str) -> bool:
         if verb == "type" and action.get("target") is None and action.get("id") is None:
             return True
     return False
+
+
+def _leaks_tool_call(text: str) -> bool:
+    lowered = text.lower()
+    return "<|" in lowered or "tool_call" in lowered or lowered.startswith(("act {", "look {", "observe {"))
 
 
 def _asks_user_to_decide(text: str) -> bool:
@@ -373,8 +383,6 @@ class LiveOpenRouterAgent:
         failures = 0
         nudges = 0
         api_errors = 0
-        last_failure = None
-        repeats = 0
 
         for _ in range(self.max_steps):
             response = self.client.chat.completions.create(
@@ -400,6 +408,10 @@ class LiveOpenRouterAgent:
                 if not content and nudges < 2:
                     nudges += 1
                     self.messages.append({"role": "user", "content": EMPTY_REPLY_RETRY})
+                    continue
+                if _leaks_tool_call(content) and nudges < 2:
+                    nudges += 1
+                    self.messages.append({"role": "user", "content": LEAKED_TOOL_CALL_RETRY})
                     continue
                 if _asks_user_to_decide(content) and nudges < 2:
                     nudges += 1
@@ -428,29 +440,9 @@ class LiveOpenRouterAgent:
                 if _is_bot_check(result):
                     self.pending_task = task
                     return BOT_CHECK_MESSAGE
-                if _is_failure(result):
-                    failures += 1
-                    key = (tool_call.function.name, tool_call.function.arguments)
-                    repeats = repeats + 1 if key == last_failure else 1
-                    last_failure = key
-                else:
-                    failures = 0
-                    last_failure = None
-                    repeats = 0
+                failures = failures + 1 if _is_failure(result) else 0
                 if failures >= self.escalate_after:
                     active_model = self.escalation_model
-            if repeats >= 2:
-                repeats = 0
-                self.messages.append(
-                    {
-                        "role": "user",
-                        "content": (
-                            "You sent the exact same failing action twice. It will never "
-                            "succeed as written. Re-read the error message, fix the JSON "
-                            "shape it shows, or take a completely different step."
-                        ),
-                    }
-                )
             if look_question is not None:
                 self._attach_screenshot(look_question)
 
