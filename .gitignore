@@ -8,8 +8,9 @@ htmlcov/
 build/
 dist/
 *.egg-info/
-.venv/
+.venv*/
 venv/
 *.md
 !README.md
 .env
+.codebase-memory/
