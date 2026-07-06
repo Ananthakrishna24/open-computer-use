@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 from dataclasses import dataclass
+from math import sqrt
 from pathlib import Path
 from statistics import mean
 from typing import Any
@@ -19,6 +20,7 @@ class Result:
     steps: int
     cost_usd: float
     success: bool
+    run: int = 0
 
     @property
     def tokens_per_step(self) -> float:
@@ -41,16 +43,19 @@ def summarize(results: list[Result]) -> list[dict[str, Any]]:
     for (suite, system, model), rows in sorted(groups.items()):
         successes = sum(1 for row in rows if row.success)
         total_cost = sum(row.cost_usd for row in rows)
+        p = successes / len(rows)
         summaries.append(
             {
                 "suite": suite,
                 "system": system,
                 "model": model,
                 "tasks": len(rows),
+                "runs": len({row.run for row in rows}),
                 "tokens_per_step": mean(row.tokens_per_step for row in rows),
                 "tokens_per_task": mean(row.input_tokens + row.output_tokens for row in rows),
                 "cost_per_task": mean(row.cost_usd for row in rows),
-                "success_rate": 100 * successes / len(rows),
+                "success_rate": 100 * p,
+                "success_ci": 196 * sqrt(p * (1 - p) / len(rows)),
                 "cost_per_success": total_cost / successes if successes else float("inf"),
             }
         )
@@ -61,14 +66,14 @@ def to_markdown(summaries: list[dict[str, Any]]) -> str:
     lines = [
         "# Benchmark Results",
         "",
-        "| Suite | System | Model | Tasks | tokens/step | tokens/task | $/task | success % | $/success |",
+        "| Suite | System | Model | Runs (n) | tokens/step | tokens/task | $/task | success % (±95) | $/success |",
         "|---|---|---|---:|---:|---:|---:|---:|---:|",
     ]
     for row in summaries:
         per_success = row["cost_per_success"]
         lines.append(
-            "| {suite} | {system} | {model} | {tasks} | {tokens_per_step:.1f} | "
-            "{tokens_per_task:.0f} | {cost_per_task:.4f} | {success_rate:.1f} | {ps} |".format(
+            "| {suite} | {system} | {model} | {runs} ({tasks}) | {tokens_per_step:.1f} | "
+            "{tokens_per_task:.0f} | {cost_per_task:.4f} | {success_rate:.1f} ±{success_ci:.1f} | {ps} |".format(
                 ps="—" if per_success == float("inf") else f"{per_success:.4f}", **row
             )
         )

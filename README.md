@@ -97,25 +97,27 @@ ocu serve --target browser --start-url https://example.com --budget 1500
 
 `benchmarks/webvoyager.py` runs a 30-task WebVoyager-style subset (books/quotes.toscrape,
 Wikipedia, httpbin, arXiv, GitHub, example.com) with substring graders and real OpenRouter
-usage metering. Three systems, same model, single-shot:
+usage metering. ocu is measured over 3 full repeats (90 task-runs); the baselines are
+single-shot. The ± column is a 95% binomial interval:
 
-| System | tokens/step | tokens/task | $/task | success % | $/success |
-|---|---:|---:|---:|---:|---:|
-| browser-use (text mode) | 14122 | 23539 | $0.0016 | 96.7 | $0.0016 |
-| ocu | 2450 | 8043 | $0.0005 | 90.0 | $0.0006 |
-| screenshot loop | 786 | 6519 | $0.0005 | 13.3 | $0.0035 |
+| System | runs (n) | tokens/step | tokens/task | $/task | success % (±95) | $/success |
+|---|---:|---:|---:|---:|---:|---:|
+| browser-use (text mode) | 1 (30) | 14122 | 23539 | $0.0016 | 96.7 ±6.4 | $0.0016 |
+| ocu | 3 (90) | 2610 | 12769 | $0.0008 | 80.0 ±8.3 | $0.0010 |
+| screenshot loop | 1 (30) | 786 | 6519 | $0.0005 | 13.3 ±12.2 | $0.0035 |
 
-Model: `google/gemma-4-26b-a4b-it` ($0.06/M in, $0.33/M out), 2026-07-05. ocu uses 5.8x
-fewer tokens per step and 2.9x fewer per task than browser-use and is 2.7x cheaper per
-successful task, at 90% vs 96.7% success. The screenshot coordinate loop is the floor: cheap
-but 13% successful at this model size. ocu's three remaining failures are model-capability
-(the driver perseverates on refused clicks and answers one task from priors), not framework;
-one of them is also browser-use's only failure.
+Model: `google/gemma-4-26b-a4b-it` ($0.06/M in, $0.33/M out), 2026-07-06. ocu uses 5.4x
+fewer tokens per step and 1.8x fewer per task than browser-use and is 1.6x cheaper per
+successful task, at 80% ±8.3 vs a single-shot 96.7%. The screenshot coordinate loop is the
+floor: cheap but 13% successful at this model size. Four tasks fail in all three ocu runs
+(httpbin-author, wiki-australia-capital, arxiv-attention-year, github-linux-desc — click
+perseveration, answers from priors, and one fact beyond the observation budget); the other
+four failures are one-off model flakes, which is what the repeat runs exist to expose.
 
 Reproduce:
 
 ```bash
 .venv/bin/python benchmarks/webvoyager.py --systems ocu,screenshot,browser-use \
-  --out benchmarks/webvoyager_results.json
+  --repeat 3 --out benchmarks/webvoyager_results.json
 .venv/bin/python benchmarks/runner.py benchmarks/webvoyager_results.json
 ```

@@ -471,39 +471,41 @@ def grade(answer, expect):
     return all(marker.casefold() in lowered for marker in expect)
 
 
-def run_suite(systems, model, max_steps, task_filter, on_result=None):
+def run_suite(systems, model, max_steps, task_filter, on_result=None, repeat=1):
     client = create_client()
     runners = {"ocu": run_ocu, "screenshot": run_screenshot, "browser-use": run_browser_use}
     results = []
-    for spec in TASKS:
-        if task_filter and spec["id"] not in task_filter:
-            continue
-        for system in systems:
-            meter = UsageMeter()
-            try:
-                answer = runners[system](client, model, spec["url"], spec["task"], max_steps, meter)
-            except Exception as exc:
-                answer = f"error: {exc}"
-            success = grade(answer, spec["expect"])
-            result = Result(
-                suite="webvoyager-subset",
-                system=system,
-                model=model,
-                task=spec["id"],
-                input_tokens=meter.input_tokens,
-                output_tokens=meter.output_tokens,
-                steps=meter.steps,
-                cost_usd=cost_usd(model, meter.input_tokens, meter.output_tokens),
-                success=success,
-            )
-            results.append(result)
-            if on_result is not None:
-                on_result(result)
-            print(
-                f"[{spec['id']}] {system}: success={success} steps={meter.steps} "
-                f"tokens={meter.input_tokens}+{meter.output_tokens} answer={answer[:120]!r}",
-                flush=True,
-            )
+    for run in range(repeat):
+        for spec in TASKS:
+            if task_filter and spec["id"] not in task_filter:
+                continue
+            for system in systems:
+                meter = UsageMeter()
+                try:
+                    answer = runners[system](client, model, spec["url"], spec["task"], max_steps, meter)
+                except Exception as exc:
+                    answer = f"error: {exc}"
+                success = grade(answer, spec["expect"])
+                result = Result(
+                    suite="webvoyager-subset",
+                    system=system,
+                    model=model,
+                    task=spec["id"],
+                    input_tokens=meter.input_tokens,
+                    output_tokens=meter.output_tokens,
+                    steps=meter.steps,
+                    cost_usd=cost_usd(model, meter.input_tokens, meter.output_tokens),
+                    success=success,
+                    run=run,
+                )
+                results.append(result)
+                if on_result is not None:
+                    on_result(result)
+                print(
+                    f"[{spec['id']}#{run}] {system}: success={success} steps={meter.steps} "
+                    f"tokens={meter.input_tokens}+{meter.output_tokens} answer={answer[:120]!r}",
+                    flush=True,
+                )
     return results
 
 
@@ -513,6 +515,7 @@ def main():
     parser.add_argument("--systems", default="ocu,screenshot")
     parser.add_argument("--tasks", default="")
     parser.add_argument("--max-steps", type=int, default=15)
+    parser.add_argument("--repeat", type=int, default=1)
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--out", type=Path, default=Path("benchmarks/webvoyager_results.json"))
     parser.add_argument("--table", type=Path, default=Path("benchmarks/results.md"))
@@ -527,12 +530,12 @@ def main():
         existing = []
         if args.out.exists():
             existing = [Result(**row) for row in json.loads(args.out.read_text())]
-        key = (result.system, result.model, result.task)
-        merged = [r for r in existing if (r.system, r.model, r.task) != key] + [result]
+        key = (result.system, result.model, result.task, result.run)
+        merged = [r for r in existing if (r.system, r.model, r.task, r.run) != key] + [result]
         args.out.write_text(json.dumps([asdict(r) for r in merged], indent=2))
         return merged
 
-    run_suite(systems, args.model, args.max_steps, task_filter, on_result=save)
+    run_suite(systems, args.model, args.max_steps, task_filter, on_result=save, repeat=args.repeat)
 
     merged = [Result(**row) for row in json.loads(args.out.read_text())] if args.out.exists() else []
     table = to_markdown(summarize(merged))
