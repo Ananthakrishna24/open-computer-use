@@ -1,14 +1,17 @@
 # open-computer-use
 
-`open-computer-use` is a perception and action layer for computer-use agents. It is not an
+`open-computer-use` is a perception and action layer for browser-use agents. It is not an
 agent loop, prompt library, planner, or trained model. The package gives any host harness two
 tools:
 
-- `observe` returns a token-budgeted screen observation.
+- `observe` returns a token-budgeted page observation.
 - `act` executes grounded actions and returns a diff observation.
 
-The core implementation is dependency-free and testable offline. Browser support is optional
-and uses Playwright when installed.
+The core implementation is dependency-free and testable offline. The browser layer uses
+Playwright when installed.
+
+The project is browser-only. An earlier Linux desktop (AT-SPI/xdotool/ydotool) layer is
+archived on the `linux-computer-use` branch and is no longer maintained here.
 
 ## Current Implementation
 

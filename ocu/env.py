@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import os
 from dataclasses import replace
 from time import sleep
 from typing import Any, Iterable, Mapping
 
-from .executors import CdpExecutor, XdotoolExecutor, YdotoolExecutor
+from .executors import CdpExecutor
 from .resolve import ResolutionError, Resolver
 from .schema import Action, BBox, Element, Observation
-from .sensors import AxLinuxSensor, BrowserSensor
+from .sensors import BrowserSensor
 from .serialize import estimate_tokens, observation_from_update
 from .state import FrameUpdate, StateStore
 
@@ -335,12 +334,6 @@ class Browser:
         return self._browser.new_page()
 
 
-def _default_desktop_executor() -> Any:
-    if os.environ.get("WAYLAND_DISPLAY"):
-        return YdotoolExecutor()
-    return XdotoolExecutor()
-
-
 def _relocate_element(sensor: Any, elements: Mapping[int, Element], target_id: int) -> tuple[int, int] | None:
     element = elements.get(target_id)
     if element is None:
@@ -361,115 +354,4 @@ def _relocate_element(sensor: Any, elements: Mapping[int, Element], target_id: i
     return best[1] if best else None
 
 
-class Desktop:
-    def __init__(
-        self,
-        *,
-        max_obs_tokens: int = 1500,
-        keyframe_interval: int = 10,
-        change_threshold: float = 0.40,
-        settle_ms: int = 150,
-        sensor: Any | None = None,
-        executor: Any | None = None,
-    ) -> None:
-        self.max_obs_tokens = max_obs_tokens
-        self.settle_ms = settle_ms
-        self.state = StateStore(keyframe_interval=keyframe_interval, change_threshold=change_threshold)
-        self.sensor = sensor if sensor is not None else AxLinuxSensor()
-        self.executor = executor if executor is not None else _default_desktop_executor()
-
-    def reset(self):
-        self.state.reset()
-        return self.observe(mode="full")
-
-    def observe(self, mode: str = "auto", region: BBox | None = None):
-        effective_mode = "region" if region is not None else mode
-        frame = self.sensor.capture(region=region)
-        update = self.state.ingest(frame.elements, url=frame.url, mode=effective_mode)
-        return observation_from_update(update, max_tokens=self.max_obs_tokens)
-
-    def act(
-        self,
-        verb: str | Action | Mapping[str, Any],
-        *,
-        target: int | None = None,
-        coordinate: tuple[int, int] | None = None,
-        text: str | None = None,
-        guard: str = "abort_on_unexpected_change",
-        **metadata: Any,
-    ):
-        if isinstance(verb, str):
-            action = Action(verb=verb, target=target, coordinate=coordinate, text=text, metadata=metadata)
-        else:
-            action = Action.coerce(verb)
-        return self.act_batch([action], guard=guard)
-
-    def act_batch(
-        self,
-        actions: Iterable[Action | Mapping[str, Any]],
-        *,
-        guard: str = "abort_on_unexpected_change",
-    ):
-        coerced = [Action.coerce(action) for action in actions]
-        if not coerced:
-            return self.observe(mode="delta")
-        if len(coerced) > 16:
-            raise ValueError(
-                f"batch of {len(coerced)} actions rejected: send at most 16 distinct actions, "
-                "never the same action repeated"
-            )
-        if not self.state.elements:
-            self.observe(mode="full")
-
-        guard_active = guard == "abort_on_unexpected_change"
-        labels: list[str] = []
-
-        for index, action in enumerate(coerced, start=1):
-            if action.verb == "observe":
-                mode = str(action.metadata.get("mode") or action.text or "full")
-                return self.observe(mode=mode if mode in {"full", "delta"} else "full")
-            if action.verb == "done":
-                return self.observe(mode="delta")
-
-            relocated = None
-            if guard_active and index > 1 and action.target is not None:
-                relocated = _relocate_element(self.sensor, self.state.elements, action.target)
-                if relocated is None:
-                    return self._finish(
-                        labels, aborted_step=index, note=f"target [{action.target}] disappeared"
-                    )
-
-            try:
-                target = Resolver(self.state.elements).resolve(action)
-                if relocated is not None:
-                    target = replace(target, coordinate=relocated)
-                self.executor.execute(action, target)
-            except Exception as exc:
-                return self._finish(labels, aborted_step=index, note=f"{action.label()} failed: {exc}")
-            labels.append(action.label())
-
-        return self._finish(labels)
-
-    def screenshot(self, region: BBox | None = None) -> bytes:
-        return self.sensor.screenshot(region=region)
-
-    def close(self) -> None:
-        return None
-
-    def _finish(self, labels: list[str], *, aborted_step: int | None = None, note: str | None = None):
-        if self.settle_ms:
-            sleep(self.settle_ms / 1000)
-        frame = self.sensor.capture()
-        last_action = "; ".join(labels) if labels else None
-        if note:
-            last_action = f"{last_action} ({note})" if last_action else note
-        update = self.state.ingest(
-            frame.elements,
-            url=frame.url,
-            last_action=last_action,
-            aborted_step=aborted_step,
-        )
-        return observation_from_update(update, max_tokens=self.max_obs_tokens)
-
-
-__all__ = ["Browser", "Desktop", "FrameUpdate", "ResolutionError"]
+__all__ = ["Browser", "FrameUpdate", "ResolutionError"]

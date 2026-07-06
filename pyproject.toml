@@ -5,11 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "open-computer-use"
 version = "0.1.0"
-description = "A perception and action layer for computer-use agents: cheap eyes, deterministic hands."
+description = "A perception and action layer for browser-use agents: cheap eyes, deterministic hands."
 requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [{name = "open-computer-use contributors"}]
-keywords = ["computer-use", "agents", "playwright", "mcp", "automation"]
+keywords = ["browser-use", "agents", "playwright", "mcp", "automation"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
