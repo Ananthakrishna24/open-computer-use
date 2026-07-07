@@ -1,8 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 
-from .core import DEFAULT_MODEL, DEFAULT_PROFILE, ESCALATION_MODEL, Agent
+with contextlib.suppress(ImportError):
+    import readline
+
+from .browser import DEFAULT_PROFILE
+from .core import DEFAULT_MODEL, ESCALATION_MODEL, Agent
+from .ui import UI
 
 
 def main() -> None:
@@ -20,6 +26,7 @@ def main() -> None:
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
 
+    ui = UI(verbose=args.verbose)
     agent = Agent(
         args.url,
         model=args.model,
@@ -29,17 +36,18 @@ def main() -> None:
         headless=args.headless,
         profile_dir=args.profile,
         block_resources=args.block_resources,
-        verbose=args.verbose,
+        on_event=ui.event,
     )
     try:
         if args.task:
-            print(agent.chat(args.task))
+            ui.begin_turn()
+            ui.say(agent.chat(args.task))
             if args.once:
                 return
-        print("Agent ready. Type a task; resume continues after a manual step; /quit exits.")
+        ui.banner(agent.model)
         while True:
             try:
-                task = input("you> ").strip()
+                task = ui.ask().strip()
             except (EOFError, KeyboardInterrupt):
                 print()
                 return
@@ -48,10 +56,17 @@ def main() -> None:
             lowered = task.lower()
             if lowered in {"/quit", "/exit", "quit", "exit"}:
                 return
-            if lowered in {"resume", "/resume", "done", "continue"}:
-                print(agent.resume())
+            if lowered in {"/help", "help", "?"}:
+                ui.help()
                 continue
-            print(agent.chat(task))
+            ui.begin_turn()
+            try:
+                if lowered in {"resume", "/resume", "done", "continue"}:
+                    ui.say(agent.resume())
+                else:
+                    ui.say(agent.chat(task))
+            except KeyboardInterrupt:
+                ui.interrupted()
     finally:
         agent.close()
 
